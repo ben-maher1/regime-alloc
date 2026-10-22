@@ -77,3 +77,40 @@ No leverage.
 
 *Pending a real-data run.* Paste `research_results/diagnose.md` tables here with a verdict on
 which of (a)–(e) is the biggest source.
+
+---
+
+## 2026-10-22 · Lever family (vol target + sleeve caps) · branch `claude/kind-mendel-krlcu2-voltarget`
+
+**Hypothesis.** Partial strengths (score/0.5) leave cash even when the whole book's risk is
+low. Normalizing base × strength to a fully invested shape, then sizing the book to a 10–15%
+vol target, should invest more in calm uptrends and de-risk on its own when vol spikes. The
+target never takes the book above the regime cap, so there's no leverage. Upside capture
+should rise without giving back drawdown control.
+
+**Why the sleeve caps (d) live here.** With the inverse-vol baseline, IBIT gets about 10% of
+the base and GLDM about 45%, against caps of 20% and 60%. Since w = base × strength ≤ base,
+the caps almost never bind in production; the `diagnose` waterfall step (d) will confirm this.
+Raising them only matters once weight is scaled up, which is what this family does.
+
+**Change.** `target_weights(port_vol_target=, port_vol_halflife=)` and
+`sizing.ewma_port_vol()`: a zero-mean EWMA covariance (hl 30) of daily returns through t.
+Checked against single-sleeve `ewma_vol`: it matches to 3 dp. Book weight
+= shape × min(target / σ̂, regime cap). `experiments/voltarget.py`:
+
+| cells | values |
+|---|---|
+| target vol × shape | 10 / 12 / 15% × binary (score > 0) / scaled (cap 0.5) |
+| sleeve caps at 12% binary | IBIT .3 / GLDM .8 and IBIT .4 / GLDM 1.0 |
+| 12% binary, no regime | regime off: is the vol target alone enough? |
+
+**Lookahead.** All 10 cells pass on synthetic data.
+
+**Prior / what to watch.** EWMA vol reacts *after* a shock, so a fast crash (Mar 2020) hits
+the book at full size before the target cuts it. MaxDD is the binding constraint here. On the
+synthetic smoke test every cell landed worse than −20%. Real data may differ, but expect this
+family to need the regime caps or a lower target.
+
+**Results.** *Pending a real-data run* (`python run_research.py grid voltarget`).
+
+**Verdict.** *Pending.*

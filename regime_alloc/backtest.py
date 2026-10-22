@@ -12,7 +12,8 @@ from .sizing import apply_rebalance_band, target_weights
 
 
 SIGNAL_PARAMS = ("lookbacks", "weights", "skip", "smoothing")
-SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal")
+SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal",
+                 "port_vol_target", "port_vol_halflife")
 
 
 def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,

@@ -29,9 +29,16 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
                    signal_floor: float = C.SIGNAL_FLOOR,
                    signal_cap: float = C.SIGNAL_CAP,
                    base_weights: dict | None = None,
-                   use_signal: bool = True) -> pd.DataFrame:
+                   use_signal: bool = True,
+                   port_vol_target: float | None = None,
+                   port_vol_halflife: int = C.VOL_HALFLIFE) -> pd.DataFrame:
     """`base_weights` (fixed dict) replaces the inverse-vol baseline and
-    `use_signal=False` sets every strength to 1. Both exist for diagnostics."""
+    `use_signal=False` sets every strength to 1. Both exist for diagnostics.
+
+    `port_vol_target` (research): instead of leaving partial strength in cash,
+    normalize base x strength to a fully-invested shape and size the whole
+    risky book to the target vol (EWMA covariance), up or down, never above
+    the regime exposure -- so no leverage."""
     assets = list(score.columns)
     if base_weights is None:
         inv = 1.0 / vol[assets]
@@ -42,7 +49,16 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
         base = base.where(score.notna())          # sleeve not live yet -> no weight
     strength = signal_strength(score, signal_floor, signal_cap) if use_signal else score.notna().astype(float).where(score.notna())
     w = base * strength
-    w = w.mul(exposure.reindex(w.index).ffill(), axis=0)
+    expo = exposure.reindex(w.index).ffill()
+    if port_vol_target is not None:
+        if returns is None:
+            raise ValueError("port_vol_target needs returns")
+        shape = w.div(w.sum(axis=1).replace(0, np.nan), axis=0).fillna(0.0)
+        pv = ewma_port_vol(shape, returns[assets], port_vol_halflife)
+        k = (port_vol_target / pv).replace(np.inf, np.nan)
+        w = shape.mul(np.minimum(k, expo), axis=0)      # NaN k (warm-up) -> NaN -> cash
+    else:
+        w = w.mul(expo, axis=0)
     w = w.clip(upper=pd.Series(max_weight).reindex(assets), axis=1)
 
     if target_vol is not None and returns is not None:
@@ -53,6 +69,22 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
     w = w.fillna(0.0)
     w[cash] = (1.0 - w.sum(axis=1)).clip(lower=0.0)  # clip float noise
     return w
+
+
+def ewma_port_vol(w: pd.DataFrame, rets: pd.DataFrame, halflife: int = C.VOL_HALFLIFE,
+                  ann: int = 252) -> pd.Series:
+    """Annualized vol of portfolio `w` under a zero-mean EWMA covariance of
+    daily returns through t (RiskMetrics style). NaN until `halflife` obs."""
+    r = rets.reindex(columns=w.columns).fillna(0.0).values
+    lam = 0.5 ** (1 / halflife)
+    S = np.zeros((r.shape[1], r.shape[1]))
+    out = np.full(len(r), np.nan)
+    W = w.fillna(0.0).values
+    for i in range(len(r)):
+        S = lam * S + (1 - lam) * np.outer(r[i], r[i])
+        if i >= halflife:
+            out[i] = np.sqrt(max(W[i] @ S @ W[i], 0.0) * ann)
+    return pd.Series(out, index=w.index)
 
 
 def _rolling_port_vol(w: pd.DataFrame, rets: pd.DataFrame, window: int = 63) -> pd.Series:
