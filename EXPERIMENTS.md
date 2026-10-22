@@ -10,12 +10,9 @@ Every experiment gets: hypothesis, change, results vs baseline, verdict. Failure
 walk-forward CAGR ≥ 11%, MaxDD no worse than −20%, and Sharpe no more than ~0.1 below baseline.
 No leverage.
 
-> **Data status: NOT RUN ON REAL DATA YET.** The cloud session that built this could not reach
-> Yahoo (`query1/query2.finance.yahoo.com`) or FRED (`fred.stlouisfed.org`); the egress proxy
-> refused both. `FRED_API_KEY` was also unset and `data_cache/` was empty. Everything below was
-> built and smoke-tested on `--synthetic` data only. Synthetic numbers mean nothing and are
-> deliberately **not** recorded here. Each "Results" section says *pending* until it has been
-> run on real data. To fill them in:
+> **Data status: run on real data 2026-10-22** (Yahoo + FRED, history through 2026-10-21). The
+> harness was built on `--synthetic` data in an earlier session that had no network access;
+> every number below comes from the real-data run. Sequence used:
 >
 > ```bash
 > export FRED_API_KEY=...
@@ -27,6 +24,18 @@ No leverage.
 > ```
 >
 > Output goes to `research_results/*.md` and `*.csv`. These are tracked so they can be reviewed.
+> The real-data lookahead log is in `research_results/lookahead.txt`.
+>
+> **Gate 1 (data sanity): PASS.** `grid baseline` reproduces the CLAUDE.md table exactly over
+> the full period: full system 9.7% / 8.7% vol / 0.96 / −11.7%; momentum-only 10.0% / 0.88 /
+> −18.7%; 200d-MA overlay 9.9% / 0.95 / −12.6%.
+>
+> **Gate 3 (lookahead): ALL PASS on real data**, covering all 67 configs in all six families,
+> the chosen config included.
+>
+> **Walk-forward window reference (2010-01-01+).** Baseline 10.2% CAGR / 8.8% vol / 1.00
+> Sharpe / −11.7% MaxDD / UpCap 0.58. Static 80/15/5 11.8% / 0.73 / −29.6%. So the brief
+> needs UpCap ≥ 0.63, CAGR ≥ 11%, MaxDD ≥ −20% and Sharpe ≥ 0.90.
 
 ### Harness (`regime_alloc/research.py`, `run_research.py`, `experiments/`)
 
@@ -75,8 +84,45 @@ No leverage.
 
 ### Diagnosis results
 
-*Pending a real-data run.* Paste `research_results/diagnose.md` tables here with a verdict on
-which of (a)–(e) is the biggest source.
+Full tables: `research_results/diagnose.md`. Annualized log-return gap vs frictionless 80/15/5:
+
+| step | falling | recovery | normal | total (full) | total (2010+) |
+|---|---|---|---|---|---|
+| friction (band, costs) | +0.1% | −0.2% | +0.4% | +0.3% | +0.3% |
+| (e) inverse-vol mix | +3.4% | −0.8% | +0.0% | **+2.7%** | **+1.7%** |
+| (d) per-sleeve caps | −0.1% | −0.1% | −0.0% | −0.2% | −0.1% |
+| binary trend filter | +3.3% | **−3.7%** | −0.8% | −1.2% | −1.8% |
+| (a) partial scaling (cap 0.5) | +0.0% | −1.1% | −0.5% | **−1.6%** | −1.2% |
+| (b) regime caps | +1.0% | −0.8% | −0.5% | −0.3% | −0.2% |
+| **total** | +7.8% | **−6.7%** | −1.4% | −0.3% | −1.4% |
+
+One-at-a-time removals from the full system (full period):
+
+| | CAGR | Sharpe | MaxDD | UpCap | Rebal/yr |
+|---|---|---|---|---|---|
+| full system | 9.7% | 0.96 | −11.7% | 0.56 | 30 |
+| − regime caps | 10.0% | 0.88 | −18.7% | 0.63 | 36 |
+| − partial scaling (binary) | **11.0%** | **1.06** | −11.6% | 0.64 | **11** |
+| − sleeve caps | 9.7% | 0.97 | −11.7% | 0.57 | 30 |
+| 80/15/5 base instead of inv-vol | 7.5% | 0.72 | −15.6% | 0.57 | 22 |
+
+Re-risking: after each >10% benchmark drawdown, exposure at the trough is 4–34% and averages
+19–44% over the next 63 days. Getting back to 80% of pre-episode exposure takes 49–88 trading
+days. In 2009 the strategy made +26.5% over the trough-to-new-high recovery; the benchmark made
++91%.
+
+**Verdict.**
+- **The prior on (e) was wrong.** The inverse-vol mix doesn't cost upside. It *adds* 2.7%/yr
+  over 80/15/5, and swapping 80/15/5 base weights into the full system drops CAGR to 7.5%. GLDM
+  has earned its weight. Fixed or tilted base weights are *not* the next experiment.
+- **(c) slow re-risking is the dominant source.** Every timing layer gives back in recoveries
+  what it saves in falls (−6.7%/yr recovery vs +7.8%/yr falling). The trend filter accounts
+  for most of the recovery loss (−3.7%).
+- **(a) is the biggest pure cost.** Partial scaling loses 1.6%/yr. Without regime caps it does
+  cut MaxDD (−22.5% → −18.7%), but once the caps are on it saves nothing (−11.6% binary vs
+  −11.7%). It also triples turnover (11 → 30 rebalances a year in the full system).
+- **(d) is ~0, as predicted.** The caps can't bind while w ≤ base.
+- **(b) regime caps are cheap.** They cost 0.3%/yr and take MaxDD from −18.7% to −11.7%.
 
 ---
 
@@ -103,7 +149,36 @@ research-only kwargs and production defaults are unchanged. `backtest.trend_up()
 caps. On the synthetic smoke test they roughly doubled MaxDD. Expect the same direction on
 real data: they buy upside with drawdown, so they may need the vol-target family as a brake.
 
-**Results.** *Pending a real-data run* (`python run_research.py grid sizing`).
+**Results** (walk-forward window 2010+, `research_results/grid_sizing.md`):
+
+| | CAGR | Vol | Sharpe | MaxDD | UpCap | AvgExp | Rebal/yr | brief |
+|---|---|---|---|---|---|---|---|---|
+| baseline (cap 0.5) | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 60% | 30 | ✗ |
+| cap 0.35 | 10.5% | 8.9% | 1.01 | −11.3% | 0.59 | 61% | 27 | ✗ |
+| cap 0.25 | 10.7% | 9.0% | 1.03 | −11.4% | 0.61 | 62% | 24 | ✗ |
+| cap 0.1 | 11.0% | 9.1% | 1.05 | −11.6% | 0.62 | 63% | 17 | ✗ (UpCap) |
+| binary | 11.5% | 9.2% | 1.08 | −11.6% | 0.65 | 64% | 11 | ✓ |
+| floor 0.25 >200d | 10.4% | 8.8% | 1.02 | −11.7% | 0.59 | 61% | 33 | ✗ |
+| floor 0.5 >200d | 10.5% | 8.9% | 1.02 | −11.7% | 0.60 | 62% | 30 | ✗ |
+| floor 1.0 >200d | 11.1% | 9.2% | 1.04 | −12.1% | 0.64 | 66% | 24 | ✓ |
+| floor 0.5 score>0 | 10.6% | 8.9% | 1.03 | −11.9% | 0.59 | 61% | 24 | ✗ |
+| zero cap 0.5 | 11.9% | 10.6% | 0.99 | −13.5% | 0.70 | 72% | 37 | ✓ |
+| zero cap 0.25 | 12.4% | 10.8% | 1.01 | −12.9% | 0.73 | 75% | 28 | ✓ |
+| normalize cap 0.5 | 13.0% | 11.1% | 1.04 | −14.4% | 0.75 | 77% | 27 | ✓ |
+| normalize cap 0.25 | 13.0% | 11.0% | 1.04 | −14.3% | 0.76 | 77% | 22 | ✓ |
+| **WF[sharpe]** | 11.3% | 9.2% | 1.07 | −11.6% | 0.63 | | | ✓ |
+| **WF[calmar]** | 11.4% | 9.2% | 1.08 | −11.6% | 0.64 | | | ✓ |
+| **WF[cagr_dd20]** | 12.6% | 10.7% | 1.03 | −13.3% | 0.73 | | | ✓ |
+
+The WF selectors pick cap 0.1 or binary (sharpe, calmar) and normalize cap 0.25 (cagr_dd20).
+
+**Verdict: PASS (rule 2), 3 of 3 objectives.** The region is flat and monotone: CAGR, Sharpe
+and UpCap rise steadily from cap 0.5 to binary, with MaxDD unchanged and turnover falling by
+two-thirds. That's a smooth slope, not a spike. The prior about drawdown was wrong:
+`normalize`/`zero` cost only 1–3 points of MaxDD on real data, not the doubling seen on
+synthetic data, because the regime caps still bound the book. The 2012 lag year gets slightly
+*worse* under binary and normalize, so this lever doesn't fix the V-recovery problem. It adds
+exposure across the board.
 ## 2026-10-22 · Lever family (b): regime caps and asymmetric deadband · branch `claude/kind-mendel-krlcu2-regime`
 
 **Hypothesis.** The 0.5 risk-off cap costs the most upside after the risk axis has turned
@@ -128,7 +203,25 @@ asserted on synthetic data. `experiments/regime.py`:
 question here is narrower: does *asymmetry* buy upside capture without moving MaxDD? Only adopt
 it if the band_up 0.05 and 0.0 rows agree. One good cell isn't enough.
 
-**Results.** *Pending a real-data run* (`python run_research.py grid regime`).
+**Results** (walk-forward window 2010+, `research_results/grid_regime.md`):
+
+| risk-off cap \ risk-on flip | 0.15 (sym) | 0.05 | 0.0 |
+|---|---|---|---|
+| 0.25 | 10.2% / 1.04 / −9.4% | 10.2% / 1.03 / −9.4% | 10.4% / 1.04 / −9.4% |
+| 0.5 (base) | 10.2% / 1.00 / −11.7% | 10.2% / 1.00 / −11.7% | 10.3% / 1.00 / −11.7% |
+| 0.75 | 10.3% / 0.96 / −14.5% | 10.3% / 0.95 / −14.5% | 10.3% / 0.96 / −14.5% |
+| 1.0 (regime off) | 10.4% / 0.91 / −18.7% | | |
+
+(CAGR / Sharpe / MaxDD.) EWMA halflife 2: 9.5% / 0.95 / −10.6% (sym), 9.6% / 0.94 / −10.6% (up 0).
+WF[sharpe] 10.4% / 1.04 / −9.4%; WF[calmar] 10.2% / 1.00 / −11.7%; WF[cagr_dd20] 9.7% / 0.89 /
+−18.7%. UpCap stays in 0.55–0.64 in every cell.
+
+**Verdict: FAIL, 0 of 3 objectives.** The asymmetric deadband does nothing: band_up 0.05 and 0.0
+change CAGR by ≤ 0.2% at every cap. The risk-off cap trades MaxDD against nothing. CAGR is flat
+at 10.2–10.4% from cap 0.25 to 1.0, while MaxDD runs from −9.4% to −18.7%. **Side finding (not
+part of this brief):** risk-off 0.25 is a free drawdown improvement (−9.4% vs −11.7%, same CAGR,
+Sharpe +0.04 which is noise) and is flat across the three flip bands. That's worth a separate
+look if drawdown ever becomes the goal; backlog item 3 now has an answer.
 ## 2026-10-22 · Lever family (c): faster re-entry · branch `claude/kind-mendel-krlcu2-reentry`
 
 **Hypothesis.** After a V-bottom the 126d and 252d horizons stay negative for months, and the
@@ -152,8 +245,39 @@ level, so sizing is untouched: (i) while a breakout is on, the score is lifted t
 **Lookahead.** All 9 cells pass on synthetic data. This check touches signal code, so it
 must be re-run on real data before adopting anything.
 
-**Results.** *Pending a real-data run* (`python run_research.py grid reentry`). Read the
-recovery-episode table from `diagnose` next to it: the fix should cut "days to 80% exp".
+**Results** (walk-forward window 2010+, `research_results/grid_reentry.md`):
+
+| | CAGR | Vol | Sharpe | MaxDD | UpCap | Rebal/yr | 2012 | 2019 | 2023 | brief |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 30 | +0.4% | +9.7% | +8.8% | ✗ |
+| breakout 20d → 0.5 | 10.9% | 8.9% | 1.06 | −11.6% | 0.62 | 29 | +2.2% | +11.0% | +13.4% | ✗ (UpCap) |
+| **breakout 20d → 1.0** | **12.1%** | 9.4% | **1.12** | **−11.6%** | **0.69** | 25 | +4.5% | +13.9% | +18.2% | ✓ |
+| breakout 50d → 0.5 | 10.5% | 8.9% | 1.02 | −11.7% | 0.60 | 26 | +1.0% | +9.7% | +12.4% | ✗ |
+| breakout 50d → 1.0 | 11.1% | 9.2% | 1.04 | −11.7% | 0.64 | 20 | +1.8% | +11.4% | +16.5% | ✓ |
+| fast blend 0.25 | 9.8% | 8.3% | 1.00 | −12.6% | 0.56 | 44 | +3.5% | +12.9% | +13.4% | ✗ |
+| fast blend 0.5 | 9.4% | 8.1% | 0.98 | −14.1% | 0.54 | 44 | +3.1% | +12.3% | +17.3% | ✗ |
+| smoothing 5 | 10.3% | 8.6% | 1.03 | −10.4% | 0.56 | 38 | +2.6% | +10.8% | +10.3% | ✗ |
+| smoothing 2 | 9.7% | 8.3% | 0.99 | −13.0% | 0.55 | 43 | +3.2% | +12.6% | +10.8% | ✗ |
+| **WF[all three objectives]** | 12.1% | 9.4% | 1.12 | −11.6% | 0.69 | | | | | ✓ |
+
+All three WF selectors pick `breakout 20d → 1.0` in **every** year from 2010. In other words,
+it was already the best cell on the 2004–2009 training window alone, and the WF row matches
+the fixed cell with no degradation. Full period (in-sample): 11.4% / 1.08 / −11.6%, against
+the baseline's 9.7% / 0.96 / −11.7%.
+
+**Verdict: PASS (rule 2), 3 of 3 objectives, for the breakout floor only.** All four breakout
+cells beat baseline on CAGR, Sharpe and UpCap with MaxDD unchanged. Strength 1.0 beats 0.5 and
+20d beats 50d in both pairings, so the direction is consistent even though only 20d → 1.0
+clears the full brief. It's also the only lever that improves *every* lag year (2009 +4.2,
+2012 +4.1, 2019 +4.2, 2023 +9.4, 2026 +3.0 points vs baseline): it targets the V-recovery
+problem directly, as hypothesized. Because it only ever adds exposure, crash behavior is
+unchanged (MaxDD −11.6%). The symmetric fast blend and lighter smoothing **fail**: they whipsaw
+(43–44 rebalances a year) and lower CAGR, also as predicted.
+
+Caveat: this family was designed *after* the V-recovery lag in this same history was known
+(CLAUDE.md lag years). The 2010+ WF window removes parameter selection bias but not
+hypothesis-selection bias. The 2004–2009 pick consistency and the clean 2×2 pattern are the
+best evidence available in-sample.
 ## 2026-10-22 · Lever family (vol target + sleeve caps) · branch `claude/kind-mendel-krlcu2-voltarget`
 
 **Hypothesis.** Partial strengths (score/0.5) leave cash even when the whole book's risk is
@@ -185,9 +309,29 @@ the book at full size before the target cuts it. MaxDD is the binding constraint
 synthetic smoke test every cell landed worse than −20%. Real data may differ, but expect this
 family to need the regime caps or a lower target.
 
-**Results.** *Pending a real-data run* (`python run_research.py grid voltarget`).
+**Results** (walk-forward window 2010+, `research_results/grid_voltarget.md`):
 
-**Verdict.** *Pending.*
+| | CAGR | Vol | Sharpe | MaxDD | UpCap | Rebal/yr | brief |
+|---|---|---|---|---|---|---|---|
+| baseline | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 30 | ✗ |
+| tv 10% binary / scaled | 10.5% / 10.6% | 8.9% | 1.02 / 1.03 | −12.9% / −13.8% | 0.63 / 0.62 | 18 / 32 | ✗ |
+| tv 12% binary / scaled | 11.6% / 11.6% | 9.9% | 1.03 / 1.02 | −13.3% / −14.2% | 0.70 / 0.68 | 15 / 30 | ✓ |
+| tv 15% binary / scaled | 12.3% / 12.3% | 10.6% | 1.02 / 1.02 | −14.3% / −14.2% | 0.74 / 0.72 | 13 / 29 | ✓ |
+| tv 12% binary, IBIT .3 GLDM .8 | 11.9% | 10.0% | 1.04 | −13.4% | 0.71 | 16 | ✓ |
+| tv 12% binary, IBIT .4 GLDM 1 | 12.0% | 10.0% | 1.05 | −13.4% | 0.71 | 16 | ✓ |
+| tv 12% binary, no regime | 11.5% | 10.7% | 0.94 | −19.2% | 0.74 | 16 | ✓ (barely) |
+| WF[sharpe] | 10.8% | 10.2% | 0.93 | −15.1% | 0.68 | | ✗ (CAGR) |
+| WF[calmar] | 10.0% | 9.1% | 0.94 | −13.8% | 0.61 | | ✗ |
+| WF[cagr_dd20] | 11.1% | 10.6% | 0.92 | −19.2% | 0.70 | | ✓ |
+
+**Verdict: FAIL (rule 2), 1 of 3 objectives.** This is the hindsight trap the decision rule was
+written to catch. Seven of the ten fixed cells pass the brief, but the WF rows lose 0.5–1.6% of
+CAGR and about 0.1 Sharpe against them. The selectors keep switching between cells, including
+the no-regime cell with −19% MaxDD, and pay for it. MaxDD did stay inside −20% (better than the
+synthetic prior), and the regime caps are clearly needed: without them MaxDD goes −13% → −19%.
+Raising the sleeve caps helps a little (+0.3–0.4% CAGR), confirming (d) only matters once
+weights are scaled up. Not adopted. The vol target adds a parameter and a covariance estimate,
+and its gain is matched more simply by the binary/breakout levers.
 
 ---
 
@@ -207,8 +351,45 @@ every family. The production path is bit-identical to `main`.
 
 ### Frontier (CAGR vs MaxDD, walk-forward window)
 
-*Pending a real-data run* (`python run_research.py frontier all`). Paste the efficient set
-(3–5 rows), the WF rows, criteria and lag-year tables here.
+Full tables: `research_results/frontier.md`. Pareto set on (CAGR, MaxDD) over 2010+, among
+all 67 configs, plus the WF rows that re-select among all of them each Jan 1:
+
+| | CAGR | Vol | Sharpe | MaxDD | UpCap | Rebal/yr | CAGR / MaxDD full | brief |
+|---|---|---|---|---|---|---|---|---|
+| regime: off 0.25 / up 0.0 | 10.4% | 8.5% | 1.04 | −9.4% | 0.56 | 27 | 9.8% / −10.9% | ✗ |
+| sizing: cap 0.25 | 10.7% | 9.0% | 1.03 | −11.4% | 0.61 | 24 | 10.3% / −11.4% | ✗ |
+| **combined: cap.25 off.5 + bo20** | 12.3% | 9.5% | **1.13** | −11.5% | 0.70 | 21 | 11.7% / −11.5% | ✓ |
+| baseline | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 30 | 9.7% / −11.7% | ✗ |
+| sizing: zero cap 0.25 | 12.4% | 10.8% | 1.01 | −12.9% | 0.73 | 28 | 11.6% / −14.9% | ✓ |
+| sizing: normalize cap 0.25 | 13.0% | 11.0% | 1.04 | −14.3% | 0.76 | 22 | 12.4% / −14.3% | ✓ |
+| combined: norm.25 off.75/up0 | 13.2% | 11.8% | 1.00 | −17.9% | 0.80 | 24 | 12.9% / −17.9% | ✓ |
+| combined: norm.25 off.5 + bo20 | 13.8% | 11.1% | 1.11 | −18.1% | 0.82 | 21 | 13.0% / −18.1% | ✓ |
+| combined: norm.25 off.75/up0 + bo20 | 14.1% | 12.0% | 1.05 | −19.1% | 0.88 | 22 | 13.6% / −19.1% | ✓ |
+| static 80/15/5 | 11.8% | 15.0% | 0.73 | −29.6% | 1.00 | | 10.0% / −47.8% | ✗ |
+| **WF[sharpe], all configs** | 11.3% | 9.4% | 1.04 | −12.3% | 0.66 | | | ✓ |
+| **WF[calmar], all configs** | 11.5% | 9.9% | 1.02 | −17.5% | 0.70 | | | ✓ |
+| **WF[cagr_dd20], all configs** | 12.2% | 11.7% | 0.93 | −19.0% | 0.80 | | | ✓ |
+
+Off-frontier, single-lever points referenced below (2010+): `breakout 20d → 1.0` (= combined
+`cap.5 off.5+bo20`) 12.1% / 1.12 / −11.6% / UpCap 0.69 / 25 rebal; `binary` 11.5% / 1.08 /
+−11.6% / 0.65 / 11 rebal; `binary + bo20` 12.2% / 1.11 / −12.8% / 0.71 / 14 rebal. The first
+sits 0.2% CAGR and 0.1 pt MaxDD inside the frontier.
+
+Reading it:
+- **The brief is feasible.** The prior that "≥ 11% at ≥ −20% with no leverage may not be
+  feasible" was too pessimistic. Every WF row passes, including the WF over all 67 configs
+  under all three objectives.
+- **The frontier has a kink at about −11.5% MaxDD.** Up to there, the breakout floor adds about
+  2% CAGR at no drawdown cost. Beyond it, each extra 1% of CAGR costs 2–3 points of MaxDD
+  (`normalize`), and Sharpe stops improving.
+- **Aggressive configs degrade out of sample, the conservative ones don't.** The top fixed cell
+  (14.1%) becomes 12.2% / 0.93 Sharpe / −19.0% under WF[cagr_dd20]: the selector chases the
+  high-CAGR corner and lands at the drawdown limit. Compare the breakout floor: 12.1% fixed,
+  12.1% WF, −11.6%.
+- **Combined factorial interactions.** The breakout floor adds 0.7–2.4% CAGR on every sizing
+  base and regime setting except `tv12`, where it adds nothing and costs 3.5 points of MaxDD. On binary it
+  overlaps (both add exposure to trending sleeves): +0.7% CAGR, −1.2 pt MaxDD. Lowering the cap
+  from 0.5 to 0.25 adds only +0.2% on top of bo20 (12.1 → 12.3), which is noise.
 
 ### Decision rule, fixed *before* seeing real results
 
@@ -240,4 +421,64 @@ Writing it down now so the choice can't be fitted to the outcome:
   If none does, the honest recommendation is the best WF point on the frontier, with the
   shortfall stated. Loosening the criteria after seeing results isn't an option.
 
-**Verdict.** *Pending a real-data run.*
+How the priors held up: (e) **wrong**, since inverse-vol is a gain, not a gap. Binary trend
+filter as a big source: **right** (it holds most of the recovery loss). (d) ≈ 0: **right**.
+Feasibility: **too pessimistic**.
+
+### Verdict: applying the decision rule
+
+1. **Data sanity: PASS.** Exact reproduction of the CLAUDE.md table.
+2. **WF evidence, per family:**
+
+   | family | WF objectives passing | flat region? | result |
+   |---|---|---|---|
+   | (a) sizing | 3 / 3 | yes, monotone cap 0.5 → binary | **adopt-eligible** |
+   | (b) regime / asymmetric band | 0 / 3 | flat, but flat at no gain | reject |
+   | (c) reentry: breakout floor | 3 / 3 | yes, consistent 2×2; same pick every year | **adopt-eligible** |
+   | (c) reentry: fast blend, smoothing | (cells fail) | — | reject |
+   | vol target | 1 / 3 | fixed cells pass, WF doesn't | reject |
+
+3. **Simplest passing config.** The best passing config is `cap.25 off.5 + bo20` (highest Sharpe
+   on the frontier, 1.13). The rule doesn't say what "best" means; I've read it as best by
+   Sharpe, which matches the repo's Sharpe-first framing. Within 0.05 Sharpe and 1% CAGR of it:
+   `breakout 20d → 1.0` alone (12.1% / 1.12), `binary` alone (11.5% / 1.08), and
+   `binary + bo20` (12.2% / 1.11). Two of those are single-lever with round numbers.
+   **The breakout floor wins the tie on the brief's own goal:** UpCap 0.69 vs 0.65, and it's the
+   only lever that lifts every lag year. Binary wins on turnover (11 vs 25 rebalances a year),
+   and the cost model already charges for that, so it's in the CAGR figures.
+   *Under the other reading* (best = max CAGR), the pick would be `norm.25 off.5 + bo20`
+   (13.8%, −18.1%). I'm rejecting that reading on evidence, not taste: the high-CAGR corner is
+   exactly where WF degrades (WF[cagr_dd20] 12.2% at −19.0% and Sharpe 0.93). It would also
+   spend 6.4 of the 8.3 points of drawdown room to buy 1.7% CAGR.
+4. **Lookahead re-run on real data: PASS** for `breakout 20d → 1.0` (and every other config).
+
+**Recommendation.** Adopt the **20-day Donchian breakout floor at full strength**
+(`breakout_high=20, breakout_strength=1.0`) on top of the current system. Everything else stays
+as is: SIGNAL_CAP 0.5, regime caps 1/1/.5/.5, symmetric deadband, inverse-vol base.
+
+| 2010+ (WF window) | CAGR | Vol | Sharpe | MaxDD | UpCap | DownCap | Rebal/yr |
+|---|---|---|---|---|---|---|---|
+| baseline | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 0.33 | 30 |
+| **+ breakout 20d → 1.0** | **12.1%** | 9.4% | **1.12** | **−11.6%** | **0.69** | 0.40 | 25 |
+| static 80/15/5 | 11.8% | 15.0% | 0.73 | −29.6% | 1.00 | 1.00 | |
+| *full period, in-sample* | 11.4% | 9.3% | 1.08 | −11.6% | 0.66 | 0.35 | 25 |
+
+It meets every criterion with room to spare: UpCap +0.11 against the +0.05 bar, CAGR 12.1%
+against 11%, MaxDD −11.6% against −20%, and Sharpe *up* 0.12. That makes it a Sharpe
+improvement, not a trade-off. It beats static 80/15/5 on CAGR over 2010+ with 40% of its
+drawdown.
+
+**Runner-up / possible follow-up:** `binary` (SIGNAL_CAP → 0) gives 11.5% / 1.08 / −11.6% with
+less than half the turnover. Stacking both (`binary + bo20`) gives 12.2% / 1.11 / −12.8%, which
+is no better than bo20 alone, so they're substitutes. Pick one.
+
+**Not done, and why:**
+- No change to `main`, `config.py` defaults or `run_daily.py`. Adopting this needs Ben's
+  approval (CLAUDE.md). `build_targets` already calls `reentry_score` when the breakout keys
+  are passed, so the change is small: add `BREAKOUT_HIGH = 20` and `BREAKOUT_STRENGTH = 1.0`
+  to `config.py`, make them the defaults when `params` omits them, and have `run_daily.py`'s
+  report say when a sleeve is held up by the breakout floor.
+- Caveat to weigh before merging: the breakout family was hypothesized from the known lag years
+  in this same sample. The WF removes parameter-picking bias, not idea-picking bias. The best
+  available mitigation is to run it in shadow mode (log both targets daily, as in backlog
+  item 2) for a few months before switching.
