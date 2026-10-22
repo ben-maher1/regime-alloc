@@ -15,7 +15,7 @@ import json
 import pandas as pd
 
 from regime_alloc import config as C
-from regime_alloc.backtest import build_targets
+from regime_alloc.backtest import build_targets, run
 from regime_alloc.data import load_asset_prices, load_market_data
 from regime_alloc.regime import (PRESSURE_FEATURES, RISK_FEATURES, compute_regime,
                                  regime_exposure)
@@ -35,7 +35,12 @@ vol = ewma_vol(prices[risky]).iloc[-1]
 brk = (breakout_state(prices[risky], C.BREAKOUT_HIGH).iloc[-1].astype(bool) if C.BREAKOUT_HIGH
        else pd.Series(False, index=risky))
 lifted = brk & (score < C.BREAKOUT_STRENGTH * C.SIGNAL_CAP)
-target = build_targets(prices, exposure).iloc[-1]
+targets = build_targets(prices, exposure)
+target = targets.iloc[-1]
+# model portfolio: follow the targets since inception with the rebalance band
+model = run(prices, targets.dropna())
+held, held_prev = model["weights"].iloc[-1], model["weights"].iloc[-2]
+rebal_today = model["trades"].iloc[-1].abs().max() > 1e-9
 today = reg.iloc[-1]
 rid = int(today["regime"])
 asof = prices.index[-1].date()
@@ -61,6 +66,15 @@ for a in risky:
     tag = "  <- held up by breakout floor" if lifted[a] else ""
     L.append(f"{a:6} {score[a]:7.2f} {vol[a]:7.1%} {'on' if brk[a] else 'off':>7} {target[a]:8.1%}{tag}")
 L.append(f"{C.CASH:6} {'':7} {'':7} {'':7} {target[C.CASH]:8.1%}")
+
+# change vs previous close: alert on a model rebalance (some sleeve > band from target) or a regime flip
+regime_flip = days_in == 1
+L += ["", f"ALERT: {'YES' if rebal_today or regime_flip else 'no'}"
+      f"  (model rebalance today: {'YES' if rebal_today else 'no'}, regime change today:"
+      f" {'YES' if regime_flip else 'no'})",
+      f"{'Asset':6} {'Held prev':>10} {'Held now':>9} {'Change':>8}"]
+for a in held.index:
+    L.append(f"{a:6} {held_prev[a]:10.1%} {held[a]:9.1%} {held[a] - held_prev[a]:+8.1%}")
 
 if args.holdings:
     cur = pd.Series(json.load(open(args.holdings))).reindex(target.index).fillna(0.0)
