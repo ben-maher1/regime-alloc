@@ -1,0 +1,45 @@
+# CLAUDE.md: regime-alloc
+
+## What this is
+A DIY replacement for a paid ($75/mo) allocation service. It sets daily target weights for **VT, GLDM, IBIT**, with **SGOV** as cash:
+1. **Regime layer** (`regime_alloc/regime.py`). Two composite axes (risk appetite, macro pressure) from VIX, MOVE, Baa−10y spread, S&P trend, DXY, copper/gold, breakevens, the 10y yield and the 10y−2y curve. These give 4 regimes, and each regime maps to a total exposure cap.
+2. **Momentum sizing** (`signals.py`, `sizing.py`). Score = average rolling Sharpe over 21/63/126/252 days, EWMA-smoothed. Weight = inverse-vol baseline × clip(score/0.5, 0, 1) × regime cap, with per-sleeve caps. The remainder goes to SGOV.
+3. **Execution realism.** Weights decided at close t earn t+1 returns. There's a 5-point rebalance band and per-asset cost bps.
+
+All parameters live in `regime_alloc/config.py`.
+
+The owner (Ben) is comfortable with quant concepts: vectorized backtests, walk-forward testing, EWMA vol, lookahead and survivorship bias. Be direct and skip the basics.
+
+## Running
+- `FRED_API_KEY` must be set in the environment. Never write it into a tracked file.
+- `python run_backtest.py` runs the full system. `--no-regime` and `--trend-overlay` run comparisons.
+- `python run_daily.py [--holdings holdings.json]` prints today's report. This is what production runs.
+- Data comes from Yahoo (yfinance) and FRED, cached in `data_cache/` (gitignored). Use `--refresh` to re-download.
+
+## Baseline (2004-10 → 2026-10, in-sample)
+| | CAGR | Vol | Sharpe | MaxDD |
+|---|---|---|---|---|
+| Full system | 9.7% | 8.7% | 0.96 | −11.7% |
+| Momentum only | 10.0% | 10.0% | 0.88 | −18.7% |
+| 200d-MA overlay | 9.9% | 9.1% | 0.95 | −12.6% |
+| VT buy&hold | 7.9% | 19.1% | 0.43 | −58.6% |
+
+Known findings:
+- The risk axis does the work. The macro-pressure axis did not help exposure or tilts, so it's kept for labels only.
+- Sharpe is flat (0.91–0.98) across smoothing ∈ {2,5,10,20} × deadband ∈ {0, .15, .3}. No single indicator dominates in ablation.
+- About 30 rebalances a year. The strategy lags in V-shaped recoveries (2009, 2012, 2019, 2023, 2026 YTD).
+- ICE HY OAS on FRED only covers 3 years, which is why Baa10Y is used for credit.
+
+## Rules for autonomous research
+- **Production is `main`.** Do experiments on branches. Merge only with Ben's approval, and never change `run_daily.py` behavior silently.
+- **Log every experiment** in `EXPERIMENTS.md`: hypothesis, change, results table vs baseline, verdict. Include failures.
+- **Guard against overfitting.** Prefer walk-forward or out-of-sample evidence. Favor flat parameter regions and round numbers. Report a grid rather than just its best cell. Treat Sharpe differences under ~0.05 as noise.
+- **No lookahead.** Any new feature must use data through close t only. Re-run the lookahead check (perturb future prices; earlier targets must not change) after touching signal code.
+- **No live trading** without explicit approval. Any Alpaca integration stays in "recommend, human approves" mode.
+
+## Research backlog (rough priority)
+1. Walk-forward validation harness: expanding-window refits of the key params, and an out-of-sample stats table.
+2. A daily log (`logs/signals.csv`) of regime, axes and targets, for side-by-side comparison with the paid service.
+3. Test risk-off caps of 0.25/0.5/0.75; dropping the 21d lookback; and weekly-only rebalancing versus the daily band.
+4. Faster re-risking after V-shaped recoveries, e.g. a lower deadband for risk-on flips only. Watch for overfit.
+5. Optional Alpaca module that generates orders for approval.

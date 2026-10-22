@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+data_cache/
+results*/
+.env
+*.env
+holdings.json

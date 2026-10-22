@@ -1,0 +1,33 @@
+# Runs after the US close on weekdays and emails the allocation report.
+# Repo secrets needed: FRED_API_KEY (phase 2), MAIL_USERNAME, MAIL_PASSWORD (Gmail app password), MAIL_TO
+# Optional: commit your current weights to holdings.json to get trade instructions.
+name: daily-allocation
+on:
+  schedule:
+    - cron: "37 21 * * 1-5"   # 21:37 UTC = 5:37pm ET (EDT); 4:37pm ET in winter
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - name: Build report
+        env: { FRED_API_KEY: "${{ secrets.FRED_API_KEY }}" }
+        run: |
+          if [ -f holdings.json ]; then H="--holdings holdings.json"; fi
+          python run_daily.py $H > report.txt
+          cat report.txt
+      - uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: Daily allocation signal
+          to: ${{ secrets.MAIL_TO }}
+          from: Allocation Bot
+          body: file://report.txt
