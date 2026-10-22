@@ -29,9 +29,21 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
                    signal_floor: float = C.SIGNAL_FLOOR,
                    signal_cap: float = C.SIGNAL_CAP,
                    base_weights: dict | None = None,
-                   use_signal: bool = True) -> pd.DataFrame:
+                   use_signal: bool = True,
+                   strength_floor: float = 0.0,
+                   trend_up: pd.DataFrame | None = None,
+                   redistribute: str | None = None) -> pd.DataFrame:
     """`base_weights` (fixed dict) replaces the inverse-vol baseline and
-    `use_signal=False` sets every strength to 1. Both exist for diagnostics."""
+    `use_signal=False` sets every strength to 1. Both exist for diagnostics.
+
+    Upside-capture levers (research; defaults = production):
+      strength_floor  min strength for sleeves where `trend_up` is True
+      redistribute    None   unused weight -> cash
+                      "zero" baseline of zero-strength sleeves is re-spread
+                             (inverse-vol) over sleeves with strength > 0
+                      "normalize" scale risky weights to sum to 1 whenever any
+                             sleeve is on (no cash drag from partial strength)
+    Regime cap and per-sleeve caps apply after; anything clipped goes to cash."""
     assets = list(score.columns)
     if base_weights is None:
         inv = 1.0 / vol[assets]
@@ -41,7 +53,17 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
         base = pd.DataFrame(np.tile(bw.values, (len(score), 1)), index=score.index, columns=assets)
         base = base.where(score.notna())          # sleeve not live yet -> no weight
     strength = signal_strength(score, signal_floor, signal_cap) if use_signal else score.notna().astype(float).where(score.notna())
+    if strength_floor and trend_up is not None:
+        up = trend_up.reindex(index=score.index, columns=assets).fillna(False).astype(bool)
+        strength = strength.where(~up | (strength >= strength_floor), strength_floor)
+    if redistribute == "zero":
+        base = base.where(strength > 0)
+        base = base.div(base.sum(axis=1), axis=0)
     w = base * strength
+    if redistribute == "normalize":
+        w = w.div(w.sum(axis=1).replace(0, np.nan), axis=0).fillna(w)
+    elif redistribute not in (None, "zero"):
+        raise ValueError(f"redistribute={redistribute!r}")
     w = w.mul(exposure.reindex(w.index).ffill(), axis=0)
     w = w.clip(upper=pd.Series(max_weight).reindex(assets), axis=1)
 

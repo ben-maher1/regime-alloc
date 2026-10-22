@@ -77,3 +77,32 @@ No leverage.
 
 *Pending a real-data run.* Paste `research_results/diagnose.md` tables here with a verdict on
 which of (a)–(e) is the biggest source.
+
+---
+
+## 2026-10-22 · Lever family (a): signal-strength cash drag · branch `claude/kind-mendel-krlcu2-sizing`
+
+**Hypothesis.** `clip(score/0.5, 0, 1)` holds a large share of a positive-trend sleeve's
+baseline in cash. Lowering SIGNAL_CAP, flooring strength for sleeves in an uptrend, or sending
+unused weight to live sleeves instead of SGOV should raise upside capture. The regime caps
+stay on, so drawdown protection should mostly survive.
+
+**Change.** `target_weights(strength_floor=, trend_up=, redistribute=)`. These are
+research-only kwargs and production defaults are unchanged. `backtest.trend_up()` defines
+"uptrend" as score > 0, close > n-day SMA, or either. `experiments/sizing.py`:
+
+| cells | values |
+|---|---|
+| SIGNAL_CAP | 0.5 (base), 0.35, 0.25, 0.1, binary |
+| strength floor (cap 0.5) | 0.25 / 0.5 / 1.0 when close > 200d SMA; 0.5 when score > 0 |
+| redistribute | `zero` (dead sleeves' baseline → live sleeves), `normalize` (risky sums to 1 when anything is on), each at cap 0.5 / 0.25 |
+
+**Lookahead.** All 13 cells pass on synthetic data.
+
+**Prior / what to watch.** `normalize` and `zero` remove *all* cash except regime and sleeve
+caps. On the synthetic smoke test they roughly doubled MaxDD. Expect the same direction on
+real data: they buy upside with drawdown, so they may need the vol-target family as a brake.
+
+**Results.** *Pending a real-data run* (`python run_research.py grid sizing`).
+
+**Verdict.** *Pending.*

@@ -12,7 +12,9 @@ from .sizing import apply_rebalance_band, target_weights
 
 
 SIGNAL_PARAMS = ("lookbacks", "weights", "skip", "smoothing")
-SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal")
+SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal",
+                 "strength_floor", "redistribute")
+EXTRA_PARAMS = {"vol_halflife", "floor_trend"}
 
 
 def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
@@ -20,7 +22,7 @@ def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
     """`params` overrides config defaults for research runs: keys from
     SIGNAL_PARAMS, SIZING_PARAMS, plus "vol_halflife". Empty = production."""
     params = dict(params or {})
-    unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - {"vol_halflife"}
+    unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - EXTRA_PARAMS
     if unknown:
         raise KeyError(f"unknown target params: {sorted(unknown)}")
     risky = [a for a in C.ASSETS if a in prices.columns]
@@ -30,11 +32,25 @@ def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
     if exposure is None:
         exposure = constant_exposure(prices.index)
     rets = prices.pct_change()
-    tw = target_weights(score, vol, exposure, returns=rets,
+    extra = {}
+    if params.get("strength_floor"):
+        extra["trend_up"] = trend_up(p, score, params.get("floor_trend", 200))
+    tw = target_weights(score, vol, exposure, returns=rets, **extra,
                         **{k: params[k] for k in SIZING_PARAMS if k in params})
     # rows where no risky signal is available yet -> NaN (warm-up)
     tw[score.isna().all(axis=1)] = np.nan
     return tw
+
+
+def trend_up(p: pd.DataFrame, score: pd.DataFrame, rule="score|200") -> pd.DataFrame:
+    """Which sleeves count as 'positive trend' for strength_floor. `rule`:
+    "score" (momentum score > 0), an int n (close above n-day SMA), or
+    "score|n" (either). Uses closes through t only."""
+    if rule == "score":
+        return score > 0
+    if isinstance(rule, str) and rule.startswith("score|"):
+        return (score > 0) | trend_up(p, score, int(rule.split("|")[1]))
+    return p > p.rolling(int(rule), min_periods=int(rule)).mean()
 
 
 def run(prices: pd.DataFrame, targets: pd.DataFrame, band: float = C.REBALANCE_BAND) -> dict:
