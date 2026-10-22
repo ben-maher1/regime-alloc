@@ -7,13 +7,15 @@ import pandas as pd
 
 from . import config as C
 from .regime import constant_exposure
-from .signals import ewma_vol, vol_adjusted_momentum
+from .signals import ewma_vol, reentry_score, vol_adjusted_momentum
 from .sizing import apply_rebalance_band, target_weights
 
 
 SIGNAL_PARAMS = ("lookbacks", "weights", "skip", "smoothing")
 SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal",
                  "strength_floor", "redistribute")
+REENTRY_PARAMS = ("fast_weight", "fast_lookbacks", "fast_smoothing",
+                  "breakout_high", "breakout_low", "breakout_strength")
 EXTRA_PARAMS = {"vol_halflife", "floor_trend"}
 
 
@@ -22,12 +24,15 @@ def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
     """`params` overrides config defaults for research runs: keys from
     SIGNAL_PARAMS, SIZING_PARAMS, plus "vol_halflife". Empty = production."""
     params = dict(params or {})
-    unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - EXTRA_PARAMS
+    unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - set(REENTRY_PARAMS) - EXTRA_PARAMS
     if unknown:
         raise KeyError(f"unknown target params: {sorted(unknown)}")
     risky = [a for a in C.ASSETS if a in prices.columns]
     p = prices[risky]
     score = vol_adjusted_momentum(p, **{k: params[k] for k in SIGNAL_PARAMS if k in params})
+    re = {k: params[k] for k in REENTRY_PARAMS if k in params}
+    if re:
+        score = reentry_score(p, score, params.get("signal_cap", C.SIGNAL_CAP), **re)
     vol = ewma_vol(p, halflife=params.get("vol_halflife", C.VOL_HALFLIFE))
     if exposure is None:
         exposure = constant_exposure(prices.index)
