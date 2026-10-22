@@ -77,3 +77,33 @@ No leverage.
 
 *Pending a real-data run.* Paste `research_results/diagnose.md` tables here with a verdict on
 which of (a)–(e) is the biggest source.
+
+---
+
+## 2026-10-22 · Lever family (c): faster re-entry · branch `claude/kind-mendel-krlcu2-reentry`
+
+**Hypothesis.** After a V-bottom the 126d and 252d horizons stay negative for months, and the
+EWMA(10) score smoothing adds more lag, so sleeves sit in SGOV through the steepest part of
+the rebound. A fast component that only *adds* exposure (a Donchian breakout floor) should
+recover the rebound and leave crash behavior alone. A symmetric fast blend also re-risks
+sooner but should whipsaw more, so watch rebalances per year.
+
+**Change.** `signals.breakout_state()`, a Donchian on/off state: on at a new N-day high and
+off at a new N-day low, using closes through t. `signals.reentry_score()` works at the score
+level, so sizing is untouched: (i) while a breakout is on, the score is lifted to at least
+`breakout_strength × SIGNAL_CAP`; (ii) or the score is blended with a 10/20d vol-adjusted score
+(EWMA hl 3). `experiments/reentry.py`:
+
+| cells | values |
+|---|---|
+| breakout floor | 20d / 50d high → strength ≥ 0.5 / 1.0 |
+| fast blend | a = 0.25 / 0.5 |
+| score smoothing | EWMA halflife 5 / 2 (vs 10) |
+
+**Lookahead.** All 9 cells pass on synthetic data. This check touches signal code, so it
+must be re-run on real data before adopting anything.
+
+**Results.** *Pending a real-data run* (`python run_research.py grid reentry`). Read the
+recovery-episode table from `diagnose` next to it: the fix should cut "days to 80% exp".
+
+**Verdict.** *Pending.*
