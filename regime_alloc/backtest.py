@@ -13,7 +13,7 @@ from .sizing import apply_rebalance_band, target_weights
 
 SIGNAL_PARAMS = ("lookbacks", "weights", "skip", "smoothing")
 SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal",
-                 "strength_floor", "redistribute")
+                 "strength_floor", "redistribute", "port_vol_target", "port_vol_halflife")
 REENTRY_PARAMS = ("fast_weight", "fast_lookbacks", "fast_smoothing",
                   "breakout_high", "breakout_low", "breakout_strength")
 EXTRA_PARAMS = {"vol_halflife", "floor_trend"}
@@ -22,7 +22,7 @@ EXTRA_PARAMS = {"vol_halflife", "floor_trend"}
 def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
                   params: dict | None = None) -> pd.DataFrame:
     """`params` overrides config defaults for research runs: keys from
-    SIGNAL_PARAMS, SIZING_PARAMS, plus "vol_halflife". Empty = production."""
+    SIGNAL_PARAMS, SIZING_PARAMS, REENTRY_PARAMS, EXTRA_PARAMS. Empty = production."""
     params = dict(params or {})
     unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - set(REENTRY_PARAMS) - EXTRA_PARAMS
     if unknown:

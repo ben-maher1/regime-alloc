@@ -157,18 +157,29 @@ def cmd_frontier(lab, fams, out: Path):
         for n, cfg in family(fam).GRID.items():
             key = "baseline" if n == "baseline" else f"{fam}:{n}"
             runs.setdefault(key, lab.run(cfg))
-    oos = stats_table(lab, runs, OOS_START)
+    wf, picks = {}, []
+    for obj in OBJECTIVES:
+        wf[obj], p = walk_forward(runs, lab.rf, obj)
+        picks.append(p)
+    wf_start = wf["sharpe"].index[0]
+    oos = stats_table(lab, runs, wf_start, wf)
     full = stats_table(lab, runs)
-    oos["efficient"] = pareto(oos)
-    t = oos[oos["efficient"] | oos.index.isin(["baseline", "static 80/15/5"])].sort_values("MaxDD", ascending=False)
+    fixed = ~oos.index.str.startswith("WF[")
+    oos["efficient"] = False
+    oos.loc[fixed, "efficient"] = pareto(oos[fixed])
+    keep = oos["efficient"] | oos.index.isin(["baseline", "static 80/15/5"]) | ~fixed
+    t = oos[keep].sort_values("MaxDD", ascending=False)
     t["CAGR full"] = full["CAGR"].reindex(t.index)
     t["MaxDD full"] = full["MaxDD"].reindex(t.index)
     crit = pd.DataFrame({n: criteria(s, oos.loc["baseline"]) for n, s in t.iterrows()}).T
-    L = [f"# Frontier ({', '.join(fams)}): walk-forward window {OOS_START}+", "",
-         "Pareto-efficient configs on (CAGR, MaxDD) plus baseline and benchmark.", "",
+    L = [f"# Frontier ({', '.join(fams)}): walk-forward window {wf_start.date()}+", "",
+         "Pareto-efficient fixed configs on (CAGR, MaxDD), plus baseline, benchmark, and WF[...] rows "
+         "that re-select among *all* configs each Jan 1 on the expanding window (the honest number: "
+         "fixed cells are picked with hindsight).", "",
          md(t.drop(columns="efficient"), pct_cols=PCT | {"CAGR full", "MaxDD full"}), "",
          "## Criteria", "", md(crit), "",
-         "## Lag years", "", md(lag_table({k: runs[k] for k in t.index if k in runs}), pct_all=True), "",
+         "## Walk-forward picks per year", "", md(pd.concat(picks, axis=1)), "",
+         "## Lag years", "", md(lag_table({k: runs[k] for k in t.index if k in runs}, wf), pct_all=True), "",
          "## All configs (walk-forward window)", "", md(oos), ""]
     (out / "frontier.md").write_text("\n".join(L))
     oos.to_csv(out / "frontier_oos.csv")

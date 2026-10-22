@@ -154,5 +154,90 @@ must be re-run on real data before adopting anything.
 
 **Results.** *Pending a real-data run* (`python run_research.py grid reentry`). Read the
 recovery-episode table from `diagnose` next to it: the fix should cut "days to 80% exp".
+## 2026-10-22 · Lever family (vol target + sleeve caps) · branch `claude/kind-mendel-krlcu2-voltarget`
+
+**Hypothesis.** Partial strengths (score/0.5) leave cash even when the whole book's risk is
+low. Normalizing base × strength to a fully invested shape, then sizing the book to a 10–15%
+vol target, should invest more in calm uptrends and de-risk on its own when vol spikes. The
+target never takes the book above the regime cap, so there's no leverage. Upside capture
+should rise without giving back drawdown control.
+
+**Why the sleeve caps (d) live here.** With the inverse-vol baseline, IBIT gets about 10% of
+the base and GLDM about 45%, against caps of 20% and 60%. Since w = base × strength ≤ base,
+the caps almost never bind in production; the `diagnose` waterfall step (d) will confirm this.
+Raising them only matters once weight is scaled up, which is what this family does.
+
+**Change.** `target_weights(port_vol_target=, port_vol_halflife=)` and
+`sizing.ewma_port_vol()`: a zero-mean EWMA covariance (hl 30) of daily returns through t.
+Checked against single-sleeve `ewma_vol`: it matches to 3 dp. Book weight
+= shape × min(target / σ̂, regime cap). `experiments/voltarget.py`:
+
+| cells | values |
+|---|---|
+| target vol × shape | 10 / 12 / 15% × binary (score > 0) / scaled (cap 0.5) |
+| sleeve caps at 12% binary | IBIT .3 / GLDM .8 and IBIT .4 / GLDM 1.0 |
+| 12% binary, no regime | regime off: is the vol target alone enough? |
+
+**Lookahead.** All 10 cells pass on synthetic data.
+
+**Prior / what to watch.** EWMA vol reacts *after* a shock, so a fast crash (Mar 2020) hits
+the book at full size before the target cuts it. MaxDD is the binding constraint here. On the
+synthetic smoke test every cell landed worse than −20%. Real data may differ, but expect this
+family to need the regime caps or a lower target.
+
+**Results.** *Pending a real-data run* (`python run_research.py grid voltarget`).
 
 **Verdict.** *Pending.*
+
+---
+
+## 2026-10-22 · Combined factorial + frontier · branch `claude/kind-mendel-krlcu2-combined`
+
+**What.** This branch merges the four lever branches. Conflicts were resolved by hand and no
+lever logic changed. `experiments/combined.py` crosses round-number settings of each lever
+(no best cells): sizing {cap 0.5, cap 0.25, binary, normalize cap 0.25, vol target 12% binary}
+× regime {risk-off 0.5 symmetric, risk-off 0.75 with risk-on flip at 0} × reentry {none,
+20d breakout → full}, which is 19 cells plus baseline. `run_research.py frontier all` pools
+*every* config from every family. It marks the Pareto set on (CAGR, MaxDD) over the
+walk-forward window and adds `WF[...]` rows that re-select among all ~70 configs each Jan 1.
+The fixed frontier cells are chosen with hindsight; the WF rows are the numbers to judge by.
+
+**Lookahead.** `lookahead all` prints ALL PASS on synthetic data, covering every config in
+every family. The production path is bit-identical to `main`.
+
+### Frontier (CAGR vs MaxDD, walk-forward window)
+
+*Pending a real-data run* (`python run_research.py frontier all`). Paste the efficient set
+(3–5 rows), the WF rows, criteria and lag-year tables here.
+
+### Decision rule, fixed *before* seeing real results
+
+Writing it down now so the choice can't be fitted to the outcome:
+
+1. **Data sanity.** `grid baseline` must reproduce the CLAUDE.md table (9.7% / 0.96 / −11.7%
+   full system) within about ±0.2% CAGR and ±0.02 Sharpe. Otherwise stop and fix the data.
+2. **Only WF evidence counts.** A lever family is adopted only if its *own grid's* WF row meets
+   the brief under at least 2 of the 3 selection objectives, **and** the neighboring cells in
+   its grid point the same way (a flat region, not a spike). Sharpe differences under 0.05 are
+   noise.
+3. **Simplest passing config wins.** Among frontier configs within 0.05 Sharpe and 1% CAGR of
+   the best one that passes, pick the one with the fewest levers and the roundest numbers.
+4. **Re-run lookahead on real data** for the chosen config before any change to `main` or
+   `run_daily.py`. Any merge waits for Ben's approval.
+
+### Prior expectation (to check against, not a result)
+
+- (e) the inverse-vol mix and the binary trend filter are probably bigger sources of the gap
+  than (a) or (b). Inverse-vol puts about 45% in GLDM against the benchmark's 15%. If
+  `diagnose` confirms this, the cheapest upside lever (fixed or tilted base weights) is not in
+  the brief and should be the next experiment.
+- (d) sleeve caps should come out near zero in `diagnose`, because they can't bind when
+  w ≤ base.
+- **CAGR ≥ 11% with MaxDD ≥ −20% and no leverage may not be feasible.** It needs most of the
+  benchmark's upside plus real timing value. Momentum-only, at about 59% average exposure,
+  already reaches 10.0% with −18.7% MaxDD, so reaching 11% at −20% means about 80%+ average
+  exposure *and* keeping the crash exits. The frontier will show whether any WF row reaches it.
+  If none does, the honest recommendation is the best WF point on the frontier, with the
+  shortfall stated. Loosening the criteria after seeing results isn't an option.
+
+**Verdict.** *Pending a real-data run.*
