@@ -25,11 +25,23 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
                    returns: pd.DataFrame | None = None,
                    max_weight: dict = C.MAX_WEIGHT,
                    target_vol: float | None = C.TARGET_VOL,
-                   cash: str = C.CASH) -> pd.DataFrame:
+                   cash: str = C.CASH,
+                   signal_floor: float = C.SIGNAL_FLOOR,
+                   signal_cap: float = C.SIGNAL_CAP,
+                   base_weights: dict | None = None,
+                   use_signal: bool = True) -> pd.DataFrame:
+    """`base_weights` (fixed dict) replaces the inverse-vol baseline and
+    `use_signal=False` sets every strength to 1. Both exist for diagnostics."""
     assets = list(score.columns)
-    inv = 1.0 / vol[assets]
-    base = inv.div(inv.sum(axis=1), axis=0)
-    w = base * signal_strength(score)
+    if base_weights is None:
+        inv = 1.0 / vol[assets]
+        base = inv.div(inv.sum(axis=1), axis=0)
+    else:
+        bw = pd.Series(base_weights).reindex(assets).fillna(0.0)
+        base = pd.DataFrame(np.tile(bw.values, (len(score), 1)), index=score.index, columns=assets)
+        base = base.where(score.notna())          # sleeve not live yet -> no weight
+    strength = signal_strength(score, signal_floor, signal_cap) if use_signal else score.notna().astype(float).where(score.notna())
+    w = base * strength
     w = w.mul(exposure.reindex(w.index).ffill(), axis=0)
     w = w.clip(upper=pd.Series(max_weight).reindex(assets), axis=1)
 

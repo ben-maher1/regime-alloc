@@ -11,15 +11,27 @@ from .signals import ewma_vol, vol_adjusted_momentum
 from .sizing import apply_rebalance_band, target_weights
 
 
-def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None) -> pd.DataFrame:
+SIGNAL_PARAMS = ("lookbacks", "weights", "skip", "smoothing")
+SIZING_PARAMS = ("max_weight", "target_vol", "signal_floor", "signal_cap", "base_weights", "use_signal")
+
+
+def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
+                  params: dict | None = None) -> pd.DataFrame:
+    """`params` overrides config defaults for research runs: keys from
+    SIGNAL_PARAMS, SIZING_PARAMS, plus "vol_halflife". Empty = production."""
+    params = dict(params or {})
+    unknown = set(params) - set(SIGNAL_PARAMS) - set(SIZING_PARAMS) - {"vol_halflife"}
+    if unknown:
+        raise KeyError(f"unknown target params: {sorted(unknown)}")
     risky = [a for a in C.ASSETS if a in prices.columns]
     p = prices[risky]
-    score = vol_adjusted_momentum(p)
-    vol = ewma_vol(p)
+    score = vol_adjusted_momentum(p, **{k: params[k] for k in SIGNAL_PARAMS if k in params})
+    vol = ewma_vol(p, halflife=params.get("vol_halflife", C.VOL_HALFLIFE))
     if exposure is None:
         exposure = constant_exposure(prices.index)
     rets = prices.pct_change()
-    tw = target_weights(score, vol, exposure, returns=rets)
+    tw = target_weights(score, vol, exposure, returns=rets,
+                        **{k: params[k] for k in SIZING_PARAMS if k in params})
     # rows where no risky signal is available yet -> NaN (warm-up)
     tw[score.isna().all(axis=1)] = np.nan
     return tw

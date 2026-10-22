@@ -117,3 +117,26 @@ def synthetic_prices(n: int = 252 * 12, seed: int = 0) -> pd.DataFrame:
         out[a] = 100 * np.exp(np.cumsum(r))
     out[C.CASH] = 100 * np.exp(np.cumsum(np.full(n, 0.03 / 252)))
     return pd.DataFrame(out, index=idx)
+
+
+def synthetic_market(prices: pd.DataFrame, seed: int = 1) -> pd.DataFrame:
+    """Fake regime-model inputs loosely tied to synthetic VT, for offline
+    smoke tests and the lookahead check. Numbers are meaningless."""
+    rng = np.random.default_rng(seed)
+    idx = prices.index
+    n = len(idx)
+    vt = np.log(prices["VT"]).diff().fillna(0.0).values
+    stress = pd.Series(-vt).ewm(halflife=10).mean().values * 252
+    rw = lambda s: np.cumsum(rng.normal(0, s, n))
+    return pd.DataFrame({
+        "^VIX": 18 * np.exp(np.clip(stress, -1, 2) + rw(0.01) * 0.2),
+        "^MOVE": 100 * np.exp(0.5 * np.clip(stress, -1, 2) + rw(0.01) * 0.2),
+        "DX-Y.NYB": 95 * np.exp(rw(0.004)),
+        "HG=F": 3 * np.exp(rw(0.012)),
+        "GC=F": prices["GLDM"].values,
+        "^GSPC": prices["VT"].values,
+        "baa_spread": 2 + 0.5 * np.clip(stress, -1, 3) + rw(0.01) * 0.1,
+        "breakeven10y": 2 + rw(0.01) * 0.2,
+        "ust10y": 3 + rw(0.03),
+        "ust2y": 2.5 + rw(0.03),
+    }, index=idx)

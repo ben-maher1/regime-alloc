@@ -14,6 +14,7 @@ The owner (Ben) is comfortable with quant concepts: vectorized backtests, walk-f
 - `FRED_API_KEY` must be set in the environment. Never write it into a tracked file.
 - `python run_backtest.py` runs the full system. `--no-regime` and `--trend-overlay` run comparisons.
 - `python run_daily.py [--holdings holdings.json]` prints today's report. This is what production runs.
+- `python run_research.py {diagnose|grid|lookahead|frontier} [family ...]` is the research harness: walk-forward, capture ratios, gap decomposition and the lookahead check. Lever grids live in `experiments/<family>.py`, and output goes to `research_results/`.
 - Data comes from Yahoo (yfinance) and FRED, cached in `data_cache/` (gitignored). Use `--refresh` to re-download.
 
 ## Baseline (2004-10 → 2026-10, in-sample)
