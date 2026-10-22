@@ -3,7 +3,7 @@
 ## What this is
 A DIY replacement for a paid ($75/mo) allocation service. It sets daily target weights for **VT, GLDM, IBIT**, with **SGOV** as cash:
 1. **Regime layer** (`regime_alloc/regime.py`). Two composite axes (risk appetite, macro pressure) from VIX, MOVE, Baa−10y spread, S&P trend, DXY, copper/gold, breakevens, the 10y yield and the 10y−2y curve. These give 4 regimes, and each regime maps to a total exposure cap.
-2. **Momentum sizing** (`signals.py`, `sizing.py`). Score = average rolling Sharpe over 21/63/126/252 days, EWMA-smoothed. Weight = inverse-vol baseline × clip(score/0.5, 0, 1) × regime cap, with per-sleeve caps. The remainder goes to SGOV.
+2. **Momentum sizing** (`signals.py`, `sizing.py`). Score = average rolling Sharpe over 21/63/126/252 days, EWMA-smoothed. A 20-day breakout floor lifts a sleeve's strength to 1 while it is on (new 20d high, until a new 20d low). Weight = inverse-vol baseline × clip(score/0.5, 0, 1), normalized so live sleeves sum to 1, then × regime cap, with per-sleeve caps. The remainder goes to SGOV. (The normalize step and the breakout floor were added by the 2026-10-22 upside-capture study; see EXPERIMENTS.md.)
 3. **Execution realism.** Weights decided at close t earn t+1 returns. There's a 5-point rebalance band and per-asset cost bps.
 
 All parameters live in `regime_alloc/config.py`.
@@ -20,7 +20,8 @@ The owner (Ben) is comfortable with quant concepts: vectorized backtests, walk-f
 ## Baseline (2004-10 → 2026-10, in-sample)
 | | CAGR | Vol | Sharpe | MaxDD |
 |---|---|---|---|---|
-| Full system | 9.7% | 8.7% | 0.96 | −11.7% |
+| Full system (normalize + 20d breakout) | 13.0% | 11.1% | 1.04 | −18.1% |
+| Pre-study system (`{}` in the research harness) | 9.7% | 8.7% | 0.96 | −11.7% |
 | Momentum only | 10.0% | 10.0% | 0.88 | −18.7% |
 | 200d-MA overlay | 9.9% | 9.1% | 0.95 | −12.6% |
 | VT buy&hold | 7.9% | 19.1% | 0.43 | −58.6% |
@@ -28,7 +29,8 @@ The owner (Ben) is comfortable with quant concepts: vectorized backtests, walk-f
 Known findings:
 - The risk axis does the work. The macro-pressure axis did not help exposure or tilts, so it's kept for labels only.
 - Sharpe is flat (0.91–0.98) across smoothing ∈ {2,5,10,20} × deadband ∈ {0, .15, .3}. No single indicator dominates in ablation.
-- About 30 rebalances a year. The strategy lags in V-shaped recoveries (2009, 2012, 2019, 2023, 2026 YTD).
+- The pre-study system made about 30 rebalances a year and lagged in V-shaped recoveries (2009, 2012, 2019, 2023, 2026 YTD). The breakout floor fixed most of that. The current system makes about 22 a year, and its MaxDD (Aug 2011–Jul 2012) sits about 2 points inside the −20% limit. VT/GLDM caps are the drawdown dial (EXPERIMENTS.md, caps family).
+- The momentum-only and 200d-MA rows above are pre-study variants.
 - ICE HY OAS on FRED only covers 3 years, which is why Baa10Y is used for credit.
 
 ## Rules for autonomous research

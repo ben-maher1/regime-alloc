@@ -32,7 +32,7 @@ def target_weights(score: pd.DataFrame, vol: pd.DataFrame, exposure: pd.Series,
                    use_signal: bool = True,
                    strength_floor: float = 0.0,
                    trend_up: pd.DataFrame | None = None,
-                   redistribute: str | None = None,
+                   redistribute: str | None = C.REDISTRIBUTE,
                    port_vol_target: float | None = None,
                    port_vol_halflife: int = C.VOL_HALFLIFE) -> pd.DataFrame:
     """`base_weights` (fixed dict) replaces the inverse-vol baseline and

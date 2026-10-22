@@ -19,7 +19,7 @@ from regime_alloc.backtest import build_targets
 from regime_alloc.data import load_asset_prices, load_market_data
 from regime_alloc.regime import (PRESSURE_FEATURES, RISK_FEATURES, compute_regime,
                                  regime_exposure)
-from regime_alloc.signals import ewma_vol, vol_adjusted_momentum
+from regime_alloc.signals import breakout_state, ewma_vol, vol_adjusted_momentum
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--holdings")
@@ -31,6 +31,10 @@ exposure = regime_exposure(reg)
 risky = list(C.ASSETS)
 score = vol_adjusted_momentum(prices[risky]).iloc[-1]
 vol = ewma_vol(prices[risky]).iloc[-1]
+# breakout floor on (new N-day high, no new N-day low since) -> strength >= BREAKOUT_STRENGTH
+brk = (breakout_state(prices[risky], C.BREAKOUT_HIGH).iloc[-1].astype(bool) if C.BREAKOUT_HIGH
+       else pd.Series(False, index=risky))
+lifted = brk & (score < C.BREAKOUT_STRENGTH * C.SIGNAL_CAP)
 target = build_targets(prices, exposure).iloc[-1]
 today = reg.iloc[-1]
 rid = int(today["regime"])
@@ -50,10 +54,13 @@ L = [f"Allocation signal as of {asof}", "",
      f"   (flip at +/-{C.REGIME_DEADBAND})",
      "  risk:     " + "  ".join(f"{k} {today[k]:+.1f}" for k in RISK_FEATURES),
      "  pressure: " + "  ".join(f"{k} {today[k]:+.1f}" for k in PRESSURE_FEATURES),
-     "", f"{'Asset':6} {'Score':>7} {'Vol':>7} {'Target':>8}"]
+     "", f"SIZING: redistribute={C.REDISTRIBUTE}, breakout floor {C.BREAKOUT_HIGH}d high"
+     f" -> strength {C.BREAKOUT_STRENGTH:g}",
+     "", f"{'Asset':6} {'Score':>7} {'Vol':>7} {'Brkout':>7} {'Target':>8}"]
 for a in risky:
-    L.append(f"{a:6} {score[a]:7.2f} {vol[a]:7.1%} {target[a]:8.1%}")
-L.append(f"{C.CASH:6} {'':7} {'':7} {target[C.CASH]:8.1%}")
+    tag = "  <- held up by breakout floor" if lifted[a] else ""
+    L.append(f"{a:6} {score[a]:7.2f} {vol[a]:7.1%} {'on' if brk[a] else 'off':>7} {target[a]:8.1%}{tag}")
+L.append(f"{C.CASH:6} {'':7} {'':7} {'':7} {target[C.CASH]:8.1%}")
 
 if args.holdings:
     cur = pd.Series(json.load(open(args.holdings))).reindex(target.index).fillna(0.0)

@@ -452,7 +452,11 @@ Feasibility: **too pessimistic**.
    spend 6.4 of the 8.3 points of drawdown room to buy 1.7% CAGR.
 4. **Lookahead re-run on real data: PASS** for `breakout 20d → 1.0` (and every other config).
 
-**Recommendation.** Adopt the **20-day Donchian breakout floor at full strength**
+> **Superseded the same day.** Ben chose best-*CAGR* as the reading of rule 3. See
+> "CAGR-first decision + sleeve caps" below: production is now `normalize` + this breakout
+> floor. The Sharpe-reading analysis is kept here for the record.
+
+**Recommendation (Sharpe reading).** Adopt the **20-day Donchian breakout floor at full strength**
 (`breakout_high=20, breakout_strength=1.0`) on top of the current system. Everything else stays
 as is: SIGNAL_CAP 0.5, regime caps 1/1/.5/.5, symmetric deadband, inverse-vol base.
 
@@ -482,3 +486,113 @@ is no better than bo20 alone, so they're substitutes. Pick one.
   in this same sample. The WF removes parameter-picking bias, not idea-picking bias. The best
   available mitigation is to run it in shadow mode (log both targets daily, as in backlog
   item 2) for a few months before switching.
+
+---
+
+## 2026-10-22 · CAGR-first decision + sleeve caps · branch `claude/kind-mendel-krlcu2-combined`
+
+**Instruction (Ben).** Read rule 3's "best" as best CAGR, not best Sharpe. Also try different
+max allocations for the three sleeves. Changes to `config.py` / `run_daily.py` are approved on
+this branch. Merging to `main` is still a separate approval.
+
+### Rule 3 under best-CAGR
+
+Among the 67 study configs that pass the brief (2010+), the best CAGR is
+`combined:norm.25 off.75/up0+bo20` at 14.1% / 1.05 / −19.1%. **It uses the regime lever, which
+failed rule 2** (0/3 WF objectives), so it isn't adoptable. Restricted to levers that passed
+rule 2 (sizing, breakout reentry), the best is `norm.25 off.5+bo20` at 13.8% / 1.11 / −18.1%.
+No single-lever config is within 1% CAGR *and* 0.05 Sharpe of it (`normalize` alone: 13.0% /
+1.04). The caps family below shows `normalize` at the production SIGNAL_CAP 0.5 matches cap 0.25
+to within 0.1% in every cap cell, so the rounder pick is **`normalize` + `bo20`, SIGNAL_CAP left
+at 0.5**.
+
+### Sleeve caps (`experiments/caps.py`, `research_results/grid_caps.md`)
+
+**Hypothesis.** Under `normalize`, a lone live sleeve gets scaled toward 100%, so the caps bind
+and the excess goes to SGOV. Higher GLDM/IBIT caps should buy CAGR at a drawdown cost, and lower
+caps (or a VT cap) should do the reverse.
+
+**Grid.** 3 bases (`bo20`, `norm.25+bo20`, `norm.5+bo20`) × VT {1.0, 0.8} × GLDM {0.4, 0.6,
+0.8, 1.0} × IBIT {0.1, 0.2, 0.3, 0.4} = 96 cells + baseline. Lookahead: ALL PASS on real data
+(`research_results/lookahead_caps.txt`).
+
+**Results, `norm.5+bo20`, 2010+, CAGR / Sharpe / MaxDD** (rows GLDM cap, columns IBIT cap):
+
+| VT 1.0 | IBIT 0.1 | 0.2 | 0.3 | 0.4 |
+|---|---|---|---|---|
+| GLDM 0.4 | 11.4 / 1.00 / −16.2 | 13.2 / 1.10 / −16.2 | 13.5 / 1.10 / −16.2 | 13.6 / 1.09 / −16.2 |
+| **0.6** | 11.9 / 1.01 / −18.1 | **13.8 / 1.10 / −18.1** | 14.1 / 1.11 / −18.1 | 14.1 / 1.09 / −18.1 |
+| 0.8 | 12.1 / 1.01 / −18.1 | 13.9 / 1.11 / −18.1 | 14.2 / 1.11 / −18.1 | 14.3 / 1.10 / −18.1 |
+| 1.0 | 12.2 / 1.02 / −18.1 | 14.0 / 1.11 / −18.1 | 14.3 / 1.12 / −18.1 | 14.4 / 1.10 / −18.1 |
+
+| VT 0.8 | IBIT 0.1 | 0.2 | 0.3 | 0.4 |
+|---|---|---|---|---|
+| GLDM 0.4 | 11.2 / 1.00 / −14.5 | 13.0 / 1.10 / −14.5 | 13.3 / 1.11 / −14.5 | 13.3 / 1.09 / −14.6 |
+| 0.6 | 11.7 / 1.01 / −16.5 | 13.5 / 1.10 / −16.5 | 13.8 / 1.11 / −16.5 | 13.9 / 1.10 / −16.5 |
+| 0.8 | 11.9 / 1.02 / −16.5 | 13.7 / 1.11 / −16.5 | 14.0 / 1.12 / −16.5 | 14.0 / 1.10 / −16.5 |
+| 1.0 | 12.0 / 1.02 / −16.5 | 13.8 / 1.12 / −16.5 | 14.1 / 1.12 / −16.5 | 14.1 / 1.11 / −16.5 |
+
+`norm.25+bo20` is within ±0.2% of these numbers in every cell. On `bo20` without normalize the
+caps barely matter: every cell is 12.1% / 1.12–1.13 / −11.6% except GLDM 0.4 (11.6%) and IBIT
+0.1 (−0.9%), which confirms they only bind once weights are scaled up.
+
+WF over the caps family: sharpe 11.1% / 1.03 / −14.4%; calmar 11.8% / 1.10 / −11.6% (picks
+`bo20` cells); cagr_dd20 **13.7% / 1.10 / −18.1%**. From 2016 on, cagr_dd20 picks
+`norm.5+bo20 VT1 G1 I0.4`. Its 2010–15 picks are IBIT 0.1 cells; those are ties broken by grid
+order, since IBIT has no data before 2014.
+
+Full period (in-sample), for the cells that matter:
+
+| | CAGR | Vol | Sharpe | MaxDD | UpCap |
+|---|---|---|---|---|---|
+| pre-study baseline | 9.7% | 8.7% | 0.96 | −11.7% | 0.56 |
+| `bo20` | 11.4% | 9.3% | 1.08 | −11.6% | 0.66 |
+| **`norm.5+bo20`, current caps** | **13.0%** | 11.1% | 1.04 | −18.1% | 0.79 |
+| `norm.5+bo20`, GLDM 1.0 / IBIT 0.4 | 13.3% | 11.7% | 1.03 | −18.1% | 0.79 |
+| `norm.5+bo20`, VT 0.8 | 12.8% | 10.9% | 1.05 | −16.5% | 0.77 |
+| `norm.5+bo20`, GLDM 0.4 | 12.5% | 10.5% | 1.06 | −16.2% | 0.76 |
+| `norm.5+bo20`, VT 0.8 / GLDM 0.4 / IBIT 0.3 | 12.5% | 10.4% | 1.07 | −14.5% | 0.75 |
+
+**Reading it.**
+- **Raising caps is nearly flat.** GLDM 0.6 → 1.0 adds 0.2–0.3% and IBIT 0.2 → 0.4 adds
+  0.3%, both with no MaxDD change and Sharpe within noise. Over the full period the loosest cell
+  adds only 0.3% CAGR and loses Sharpe. The IBIT part is bitcoin's 2015–2021 run, the most
+  hindsight-prone input in the dataset.
+- **IBIT 0.1 is clearly bad** (−1.9% CAGR, −0.09 Sharpe): the 0.2 cap is earning its keep.
+- **The caps that bind on drawdown are GLDM and VT, not IBIT.** The −18.1% MaxDD is
+  Aug 2011 → Jul 2012: gold topped and chopped while the book was concentrated. GLDM ≤ 0.4 or
+  VT ≤ 0.8 cuts it by about 2 points for −0.3 to −0.6% CAGR. Both together reach −14.5% for
+  −0.8% (−0.5% if IBIT goes to 0.3). That's a clean drawdown dial if one is ever wanted.
+
+**Verdict.** Rule 3 (within 1% CAGR and 0.05 Sharpe of the best, then fewest changes and
+roundest numbers): the best caps cell (14.4%) is within 0.6% of the current caps (13.8%) at the
+same Sharpe and MaxDD. **The caps stay at VT 1.0 / GLDM 0.6 / IBIT 0.2.** If you want the last
+~0.3–0.6% anyway, the least hindsight-prone version is GLDM 0.8–1.0 with IBIT left at 0.2.
+
+### Production change (this branch; `main` untouched)
+
+- `config.py`: `REDISTRIBUTE = "normalize"`, `BREAKOUT_HIGH = 20`, `BREAKOUT_STRENGTH = 1.0`.
+  SIGNAL_CAP, caps, regime and band are unchanged.
+- `sizing.target_weights` defaults `redistribute` to `C.REDISTRIBUTE`. `build_targets` applies
+  the breakout floor from config unless `params` overrides it (`breakout_high=None` disables).
+- `research.py`: `PRE_STUDY` is laid under every config, so `{}` still means the pre-study
+  system and every logged result above reproduces. This was checked: baseline, `bo20` and
+  `norm.5+bo20` match the logged CAGRs to 4 dp. `PRODUCTION` holds the new defaults, and
+  `build_targets(prices, exposure)` with no params is bit-identical to
+  `caps:norm.5+bo20 VT1 G0.6 I0.2`.
+- `run_daily.py`: adds a SIZING line and a `Brkout` column, and flags any sleeve
+  "held up by breakout floor" (breakout on and raw score below `BREAKOUT_STRENGTH × SIGNAL_CAP`).
+- **Not yet run in this session:** `run_daily.py` and `run_backtest.py`. The session's permission
+  policy blocked running the production entry points. Run them once before merging.
+
+| new production | CAGR | Vol | Sharpe | MaxDD | UpCap | Rebal/yr |
+|---|---|---|---|---|---|---|
+| 2010+ (WF window) | 13.8% | 11.1% | 1.10 | −18.1% | 0.81 | 24 |
+| full period (in-sample) | 13.0% | 11.1% | 1.04 | −18.1% | 0.79 | 22 |
+| pre-study, 2010+ | 10.2% | 8.8% | 1.00 | −11.7% | 0.58 | 30 |
+
+**What this costs vs the Sharpe pick (`bo20` alone):** +1.7% CAGR and +0.12 UpCap for 6.5 points
+of MaxDD, leaving 1.9 points of room to the −20% limit. Out of sample, the
+CAGR-first pooled selection lands at 12.2% / −19.0% (WF[cagr_dd20] over all study configs), so
+expect a live drawdown near the limit at some point. The VT/GLDM caps above are the dial if that
+becomes uncomfortable.

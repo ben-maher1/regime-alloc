@@ -38,6 +38,9 @@ ANNUALIZATION = {"VT": 252, "GLDM": 252, "IBIT": 252}  # BTC proxy is resampled 
 # ---- Sizing ----
 SIGNAL_FLOOR = 0.0                 # score <= floor -> 0 weight
 SIGNAL_CAP = 0.5                   # score >= cap -> full baseline weight (score is a rolling Sharpe)
+REDISTRIBUTE = "normalize"         # scale live sleeves so risky weights sum to 1 (then regime cap); None = rest to cash
+BREAKOUT_HIGH = 20                 # re-entry floor: close at a new N-day high -> strength >= BREAKOUT_STRENGTH
+BREAKOUT_STRENGTH = 1.0            #   until a close at a new N-day low; None disables (EXPERIMENTS.md 2026-10-22)
 MAX_WEIGHT = {"VT": 1.0, "GLDM": 0.6, "IBIT": 0.2}
 TARGET_VOL = None                  # e.g. 0.12 for portfolio vol targeting; None = off
 REBALANCE_BAND = 0.05              # only trade a sleeve if |target - current| > band

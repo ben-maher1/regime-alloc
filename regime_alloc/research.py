@@ -6,7 +6,9 @@ A run config is a flat dict. Keys:
   regime_*          see REGIME_KEYS; passed to compute_regime / regime_exposure
   band              rebalance band
   anything else     forwarded to backtest.build_targets(params=...)
-An empty dict is the production system.
+An empty dict is the pre-study system (main before the 2026-10-22 upside-capture
+study): PRE_STUDY is laid under every config so logged results stay reproducible.
+PRODUCTION is the current config.py defaults written out explicitly.
 """
 from __future__ import annotations
 
@@ -26,6 +28,9 @@ STAT_COLS = ["CAGR", "Vol", "Sharpe", "MaxDD", "Calmar", "UpCap", "DownCap", "Av
 # regime-side keys -> compute_regime kwargs (lever branches may extend this)
 REGIME_KEYS = {"regime_smoothing": "smoothing", "regime_deadband": "band", "regime_band_up": "band_up"}
 RUN_KEYS = {"exposure", "regime_exposure", "band"} | set(REGIME_KEYS)
+PRE_STUDY = {"redistribute": None, "breakout_high": None}
+PRODUCTION = {"redistribute": C.REDISTRIBUTE, "breakout_high": C.BREAKOUT_HIGH,
+              "breakout_strength": C.BREAKOUT_STRENGTH}
 
 
 # ---------------------------------------------------------------- lab
@@ -63,7 +68,7 @@ class Lab:
         return regime_exposure(self.regime(cfg), cfg.get("regime_exposure", C.REGIME_EXPOSURE))
 
     def targets(self, cfg: dict) -> pd.DataFrame:
-        params = {k: v for k, v in cfg.items() if k not in RUN_KEYS}
+        params = {**PRE_STUDY, **{k: v for k, v in cfg.items() if k not in RUN_KEYS}}
         return build_targets(self.prices, self.exposure(cfg), params)
 
     def run(self, cfg: dict) -> dict:

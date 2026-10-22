@@ -30,8 +30,9 @@ def build_targets(prices: pd.DataFrame, exposure: pd.Series | None = None,
     risky = [a for a in C.ASSETS if a in prices.columns]
     p = prices[risky]
     score = vol_adjusted_momentum(p, **{k: params[k] for k in SIGNAL_PARAMS if k in params})
-    re = {k: params[k] for k in REENTRY_PARAMS if k in params}
-    if re:
+    re = {"breakout_high": C.BREAKOUT_HIGH, "breakout_strength": C.BREAKOUT_STRENGTH,
+          **{k: params[k] for k in REENTRY_PARAMS if k in params}}
+    if re.get("breakout_high") or re.get("fast_weight"):
         score = reentry_score(p, score, params.get("signal_cap", C.SIGNAL_CAP), **re)
     vol = ewma_vol(p, halflife=params.get("vol_halflife", C.VOL_HALFLIFE))
     if exposure is None:
