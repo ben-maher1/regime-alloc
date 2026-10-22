@@ -104,5 +104,30 @@ caps. On the synthetic smoke test they roughly doubled MaxDD. Expect the same di
 real data: they buy upside with drawdown, so they may need the vol-target family as a brake.
 
 **Results.** *Pending a real-data run* (`python run_research.py grid sizing`).
+## 2026-10-22 · Lever family (b): regime caps and asymmetric deadband · branch `claude/kind-mendel-krlcu2-regime`
+
+**Hypothesis.** The 0.5 risk-off cap costs the most upside after the risk axis has turned
+up but before it clears +0.15. Raising the risk-off cap or flipping back to risk-on sooner
+should recover V-shaped rebounds. Going risk-off is left untouched, so crash protection is
+kept.
+
+**Change.** `sticky_sign(band_up=)` and `compute_regime(band_up=)`. `band_up` sets the
+threshold for flipping *back* to risk-on and applies to the risk axis only. The risk-off
+threshold stays −0.15. With `band_up=None` the regime is identical to production; this is
+asserted on synthetic data. `experiments/regime.py`:
+
+| cells | values |
+|---|---|
+| risk-off cap (regimes 3/4) | 0.25 / 0.5 (base) / 0.75 / 1.0 (= regime off) |
+| × risk-on flip band | 0.15 (symmetric, base) / 0.05 / 0.0 |
+| + regime EWMA halflife | 2 (vs 5) at cap 0.5, symmetric and band_up 0 |
+
+**Lookahead.** All 12 cells pass on synthetic data.
+
+**Overfit note.** Known finding: Sharpe is flat across regime smoothing × deadband. The
+question here is narrower: does *asymmetry* buy upside capture without moving MaxDD? Only adopt
+it if the band_up 0.05 and 0.0 rows agree. One good cell isn't enough.
+
+**Results.** *Pending a real-data run* (`python run_research.py grid regime`).
 
 **Verdict.** *Pending.*

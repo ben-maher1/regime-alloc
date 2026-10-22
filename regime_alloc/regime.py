@@ -54,7 +54,11 @@ def features(m: pd.DataFrame, n: int = C.CHANGE_DAYS) -> pd.DataFrame:
     return f
 
 
-def sticky_sign(x: pd.Series, band: float = C.REGIME_DEADBAND) -> pd.Series:
+def sticky_sign(x: pd.Series, band: float = C.REGIME_DEADBAND,
+                band_up: float | None = None) -> pd.Series:
+    """Sign with hysteresis: flips to -1 below -band, to +1 above band_up
+    (defaults to band; a smaller band_up = faster flips back to +)."""
+    up = band if band_up is None else band_up
     out = np.full(len(x), np.nan)
     state = np.nan
     for i, v in enumerate(x.values):
@@ -65,20 +69,23 @@ def sticky_sign(x: pd.Series, band: float = C.REGIME_DEADBAND) -> pd.Series:
             state = 1.0 if v >= 0 else -1.0
         elif state > 0 and v < -band:
             state = -1.0
-        elif state < 0 and v > band:
+        elif state < 0 and v > up:
             state = 1.0
         out[i] = state
     return pd.Series(out, index=x.index)
 
 
 def compute_regime(m: pd.DataFrame, smoothing: int = C.REGIME_SMOOTHING,
-                   band: float = C.REGIME_DEADBAND) -> pd.DataFrame:
+                   band: float = C.REGIME_DEADBAND,
+                   band_up: float | None = None) -> pd.DataFrame:
+    """`band_up` (research) applies to the risk axis only: the threshold for
+    flipping back to risk-on. None = symmetric (production)."""
     f = features(m)
     risk = f[RISK_FEATURES].mean(axis=1, skipna=True).where(f[RISK_FEATURES].notna().sum(axis=1) >= 3)
     pres = f[PRESSURE_FEATURES].mean(axis=1, skipna=True).where(f[PRESSURE_FEATURES].notna().sum(axis=1) >= 2)
     risk_s = risk.ewm(halflife=smoothing).mean()
     pres_s = pres.ewm(halflife=smoothing).mean()
-    rs, ps = sticky_sign(risk_s, band), sticky_sign(pres_s, band)
+    rs, ps = sticky_sign(risk_s, band, band_up), sticky_sign(pres_s, band)
     regime = pd.Series(np.select(
         [(rs > 0) & (ps <= 0), (rs > 0) & (ps > 0), (rs <= 0) & (ps <= 0), (rs <= 0) & (ps > 0)],
         [1, 2, 3, 4], default=np.nan), index=m.index)

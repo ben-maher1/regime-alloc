@@ -24,7 +24,7 @@ NO_CAPS = {"VT": 1.0, "GLDM": 1.0, "IBIT": 1.0}
 STAT_COLS = ["CAGR", "Vol", "Sharpe", "MaxDD", "Calmar", "UpCap", "DownCap", "AvgExp", "Rebal/yr"]
 
 # regime-side keys -> compute_regime kwargs (lever branches may extend this)
-REGIME_KEYS = {"regime_smoothing": "smoothing", "regime_deadband": "band"}
+REGIME_KEYS = {"regime_smoothing": "smoothing", "regime_deadband": "band", "regime_band_up": "band_up"}
 RUN_KEYS = {"exposure", "regime_exposure", "band"} | set(REGIME_KEYS)
 
 
