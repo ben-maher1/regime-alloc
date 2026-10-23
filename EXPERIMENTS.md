@@ -782,3 +782,52 @@ yearly-rebalanced 60/30/10 in exchange for roughly half the drawdown (−15 to �
 tax-aware variant for taxable that only acts on regime flips, uses a wider band and holds lots
 to long-term; (3) lifting the BTC sleeve (base weight or cap), since BTC treatment is the
 pre-tax gap. That one is high hindsight risk.
+
+---
+
+## 2026-10-23 · Bitcoin treatment · `run_btc.py`, `research_results/btc.md`
+
+**Hypothesis.** The pre-tax gap to yearly 60/30/10 comes from how the strategy handles BTC.
+It averages 8.3% IBIT since 2015 and holds 0 on 26% of days, through an inverse-vol base, trend
+exits and a 20% cap. Holding BTC as a fixed sleeve, or timing it inside a fixed slot, should
+close the gap.
+
+**Variants** (pre-tax; sleeves rebalanced yearly; BTC data starts 2014, so windows run from 2015):
+
+| 2015–2026 | CAGR | Vol | Sharpe | MaxDD |
+|---|---|---|---|---|
+| **production** | 17.3% | 11.2% | **1.31** | **−15.2%** |
+| production, IBIT cap 0.3 | 17.5% | 11.5% | 1.31 | −15.0% |
+| VT/GLDM timed + BTC fixed 5% | 15.6% | 11.8% | 1.13 | −18.6% |
+| VT/GLDM timed + BTC fixed 10% | 21.0% | 15.3% | 1.21 | −25.5% |
+| VT/GLDM timed + BTC fixed 15% | 25.7% | 18.6% | 1.22 | −30.5% |
+| VT/GLDM timed 90% + BTC timed alone 10% | 20.9% | 15.0% | 1.21 | −25.4% |
+| VT/GLDM timed, no BTC | 8.8% | 9.2% | 0.77 | −15.7% |
+| static 60/30/10 yearly | 22.3% | 17.5% | 1.13 | −29.2% |
+| static 67/33 yearly, no BTC | 10.6% | 12.7% | 0.71 | −24.0% |
+| BTC buy & hold / BTC timed alone | 57.1% / 62.5% | 65% / 58% | 1.00 / 1.10 | −83% / −78% |
+
+Split halves: 2015–2019, BTC fixed 10% returns 25.0% vs production's 14.0%. 2020–2026,
+**production wins on both axes** (19.7% / 1.27 / −15.2% against BTC fixed 10% at 18.2% / 1.13 /
+−20.5%, and static 60/30/10 at 18.7% / 0.94 / −29.2%).
+
+**Reading.**
+- **Size, not timing.** Timing BTC inside a fixed 10% slot returns the same as holding it
+  (20.9% vs 21.0%) with a slightly smaller DD. Timing BTC alone helped in 2015–19 (106% vs 82%/yr)
+  and roughly tied in 2020–26 with a much smaller DD (−58% vs −77%). That fits the crypto
+  momentum literature. The gap is how *much* BTC the book holds, not when.
+- **More BTC is a risk dial, not an optimization.** Each extra 5% of fixed BTC adds about 5%/yr
+  CAGR and 5–6 points of MaxDD at a flat Sharpe of about 1.2. Production has the best Sharpe and
+  the smallest DD of any variant.
+- **The gap is a 2015–2019 story.** That was BTC's run from about $300 to $7k on a tiny base.
+  Since 2020 the production treatment beats every fixed sleeve on return and risk.
+- **The data can't pick a BTC weight.** BTC's mean return has a standard error of about
+  σ/√T ≈ 65%/√12 ≈ 19%/yr, so the 57% CAGR is roughly ±37% at 95%.
+- **Side finding.** Since 2015, VT/GLDM timing without BTC trails static 67/33 (8.8% vs 10.6%)
+  with a smaller DD (−15.7% vs −24.0%). In 2005–2013 the timing won. A long bull market hurts
+  timing on return.
+
+**Verdict.** No change to BTC handling. A larger BTC position is a risk-appetite decision for
+Ben, not something the backtest can justify. If he wants one, a fixed sleeve of N% held
+outside the timing is the clean implementation: its return and drawdown scale roughly
+linearly with N.
