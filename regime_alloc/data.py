@@ -78,9 +78,20 @@ def splice(primary: pd.Series, proxy: pd.Series) -> pd.Series:
     return pd.concat([pre.iloc[:-1] * scale, primary])
 
 
+def cash_index(index: pd.DatetimeIndex, refresh: bool = False) -> pd.Series:
+    """Level of a cash balance earning max(fed funds - CASH_RATE_SPREAD, 0),
+    accrued act/360 over calendar days at the rate set on the prior business
+    day (known at t-1)."""
+    ff = fetch_fred({C.CASH_RATE_SERIES: "fed_funds"}, refresh=refresh)["fed_funds"]
+    rate = (ff / 100 - C.CASH_RATE_SPREAD).clip(lower=0.0)
+    rate = rate.reindex(rate.index.union(index)).ffill().reindex(index).fillna(0.0)
+    days = pd.Series(index, index=index).diff().dt.days.fillna(0)
+    return 100 * (1 + rate.shift(1).fillna(0.0) * days / 360).cumprod().rename(C.CASH)
+
+
 def load_asset_prices(refresh: bool = False) -> pd.DataFrame:
     tickers = set(C.ASSETS) | {v["proxy"] for v in C.ASSETS.values()}
-    tickers |= set(C.EXTRA_PROXY.values()) | {C.CASH, C.CASH_PROXY}
+    tickers |= set(C.EXTRA_PROXY.values())
     raw = to_bday(fetch_yf(sorted(tickers), refresh=refresh))
 
     out = {}
@@ -89,7 +100,7 @@ def load_asset_prices(refresh: bool = False) -> pd.DataFrame:
         if a in C.EXTRA_PROXY:
             s = splice(s, raw[C.EXTRA_PROXY[a]])
         out[a] = s
-    out[C.CASH] = splice(raw.get(C.CASH, pd.Series(dtype=float)), raw[C.CASH_PROXY])
+    out[C.CASH] = cash_index(raw.index, refresh=refresh)
     return pd.DataFrame(out)
 
 

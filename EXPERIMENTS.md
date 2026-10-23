@@ -707,3 +707,78 @@ CAGRs to 4 dp, and `run(prices, build_targets(prices, exposure))` with config de
 identical to `cadence:daily band 0.1`. New production, full period: 13.4% / 11.2% vol / 1.06 /
 −18.3%, 14 trade days a year. Side effect visible today: the model book keeps about 5% GLDM
 because the Sep 25 sale of the last 5% no longer clears the band.
+
+---
+
+## 2026-10-23 · Cash model: fed funds − 30bp (production change, Ben's spec)
+
+**Change.** The risk-off asset is a cash balance, not SGOV. `config.CASH = "CASH"`, earning
+`max(DFF − 0.30%, 0)` from FRED. It accrues act/360 over calendar days at the prior business
+day's rate, has zero trading cost, and is floored at 0 because a cash account doesn't charge
+negative rates. `data.cash_index` builds it. BIL/SGOV are no longer downloaded.
+
+**Effect.** Small. Production over the full period goes from 13.4% / 1.06 / −18.3% to
+13.5% / 1.04 / −18.2%. The Sharpe moves because the risk-free series is now this cash.
+Cash returns 0.00% in 2012, 1.45% in 2022, 4.89% in 2023, 5.08% in 2024 and 4.05% in 2025.
+Logged results before this entry used SGOV/BIL and will differ in the second decimal place if
+re-run. Not worth a compatibility flag.
+
+---
+
+## 2026-10-23 · Taxable account viability + a correction to the 60/30/10 finding
+
+**Question (Ben).** Is the strategy viable in a taxable account? The IRA is non-taxable.
+
+**Tax model** (`regime_alloc/tax.py`, `run_tax.py`, `research_results/tax.md`). It works at
+lot level and sells highest-cost lots first (specific ID). Gains are short-term if held ≤ 365
+days, else long-term. GLDM's long-term gains are collectibles, capped at 28%. It applies
+wash-sale disallowance both ways (±30 days) and IRS netting across the ST / 28% / 15–20%
+buckets, with losses carried forward. The $3k ordinary offset is ignored. VT dividends (2%/yr,
+qualified) and cash interest are taxed as they arrive. Each year's tax is paid on the first
+trading day after Apr 15, by selling all holdings pro rata. Validation: with all rates at 0 the
+account reproduces the backtest within 0.04 bp/day. Scenarios are federal only: 24%/15%,
+32%/15% + 3.8% NIIT, and 37%/20% + NIIT.
+
+**Correction first.** Every earlier "vs 60/30/10" result used a **daily**-rebalanced static
+mix. A real investor rebalances maybe yearly, and with bitcoin in the mix that makes a large
+difference:
+
+| pre-tax CAGR, start → 2026-10-21 | strategy | 60/30/10 yearly | 60/30/10 daily |
+|---|---|---|---|
+| 2005 | 13.4% (MaxDD −18.2%) | **14.9%** (−39.7%) | 12.2% (−41.1%) |
+| 2010 | 14.2% (−18.2%) | **17.1%** (−31.3%) | 13.6% (−27.5%) |
+| 2015 | 17.4% (−15.2%) | **21.9%** (−31.3%) | 17.0% (−27.5%) |
+| 2020 | **19.9%** (−15.2%) | 19.2% (−29.0%) | 17.7% (−27.5%) |
+| 2005–2013 only (no BTC) | **9.6%** (−18.2%) | 7.7% (−39.7%) | 7.7% (−41.1%) |
+
+The gap is all bitcoin. Before BTC, yearly and daily rebalancing are identical and the strategy
+wins by 1.9%/yr. Since 2014, a yearly reset to 10% BTC rides BTC's within-year runs, which daily
+rebalancing keeps selling. The strategy captures less: its inverse-vol base gives BTC only about
+10%, it goes to 0 on negative trends, and it caps at 20%. That puts the 2026-10-23 finding that
+timing adds "0–0.7%/yr over its own mix" against the wrong benchmark. **Against a
+yearly-rebalanced 60/30/10 the strategy trails pre-tax by 1.5–4.5%/yr since 2005–2015 and ties
+since 2020.** It still has about half the drawdown. Caveat: the static mix's edge is having held
+bitcoin through a roughly 300× run, which may not repeat.
+
+**After tax** (32%/15% + NIIT, everything sold at the end):
+
+| start | strategy | 60/30/10 yearly | gap |
+|---|---|---|---|
+| 2005 | 9.9% | 12.8% | −2.9%/yr |
+| 2010 | 10.5% | 14.7% | −4.2%/yr |
+| 2015 | 12.8% | 18.6% | −5.8%/yr |
+| 2020 | 14.3% | 15.4% | −1.1%/yr |
+
+The strategy's tax drag is 3.5–5.6%/yr (2015+: 17.4% → 12.8%), against 2.3–3.8% for yearly
+60/30/10. Its realized gains are mostly short-term: 2015–2025 ST net 1.61×, LT 1.24×,
+collectibles 0.30× of the starting balance. Even from 2020, where it wins pre-tax by 0.7%/yr, it
+loses by 1.1%/yr after tax. Every bracket scenario points the same way (`tax.md`).
+
+**Verdict.** **Not viable as-is in the taxable account.** It gives up 1–6%/yr after tax to a
+yearly-rebalanced 60/30/10 in exchange for roughly half the drawdown (−15 to −18% vs −29 to
+−40% pre-tax). In the IRA, taxes don't apply but the correction does: there too it trails yearly
+60/30/10 on return since 2010 and wins only on drawdown. Possible next steps, all untested:
+(1) asset location, holding the high-turnover and collectibles sleeves in the IRA; (2) a
+tax-aware variant for taxable that only acts on regime flips, uses a wider band and holds lots
+to long-term; (3) lifting the BTC sleeve (base weight or cap), since BTC treatment is the
+pre-tax gap. That one is high hindsight risk.

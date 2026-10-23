@@ -4,7 +4,7 @@
     python run_daily.py --holdings holdings.json
 
 holdings.json (current weights, any subset; missing = 0), e.g.
-    {"VT": 0.62, "GLDM": 0.18, "IBIT": 0.05, "SGOV": 0.15}
+    {"VT": 0.62, "GLDM": 0.18, "IBIT": 0.05, "CASH": 0.15}
 
 Needs FRED_API_KEY in the environment. Output is plain text so it can be
 piped to email / Slack / ntfy from cron or GitHub Actions.

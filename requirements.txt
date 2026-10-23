@@ -4,3 +4,4 @@ yfinance
 fredapi
 pyarrow
 matplotlib
+tabulate

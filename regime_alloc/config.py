@@ -9,8 +9,10 @@ ASSETS = {
 }
 EXTRA_PROXY = {"VT": "SPY"}        # second-level fallback for the deepest history
 
-CASH = "SGOV"                      # where un-invested capital sits (proxy: BIL)
-CASH_PROXY = "BIL"
+CASH = "CASH"                      # where un-invested capital sits: a cash balance, not a fund
+CASH_RATE_SERIES = "DFF"           # FRED daily effective fed funds rate (%)
+CASH_RATE_SPREAD = 0.0030          # cash earns fed funds minus 30bp, floored at 0, accrued act/360
+                                   # (SGOV, proxied by BIL, before 2026-10-23)
 
 # Regime-model inputs (used in the next phase; fetched now so the cache is warm)
 MARKET_TICKERS = ["^VIX", "^MOVE", "DX-Y.NYB", "HYG", "LQD", "HG=F", "GC=F", "^GSPC"]
@@ -46,7 +48,7 @@ TARGET_VOL = None                  # e.g. 0.12 for portfolio vol targeting; None
 REBALANCE_BAND = 0.10              # only trade a sleeve if |target - current| > band (0.05 before 2026-10-23; EXPERIMENTS.md cadence family)
 
 # ---- Costs ----
-COST_BPS = {"VT": 3, "GLDM": 3, "IBIT": 5, "SGOV": 1}
+COST_BPS = {"VT": 3, "GLDM": 3, "IBIT": 5, "CASH": 0}
 
 # ---- Regime model ----
 Z_WINDOW = 756                     # rolling window (days) for standardizing indicators

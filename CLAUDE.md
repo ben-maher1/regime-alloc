@@ -1,7 +1,7 @@
 # CLAUDE.md: regime-alloc
 
 ## What this is
-A DIY replacement for a paid ($75/mo) allocation service. It sets daily target weights for **VT, GLDM, IBIT**, with **SGOV** as cash:
+A DIY replacement for a paid ($75/mo) allocation service. It sets daily target weights for **VT, GLDM, IBIT**, with a **cash** balance (fed funds − 30bp) as the risk-off asset:
 1. **Regime layer** (`regime_alloc/regime.py`). Two composite axes (risk appetite, macro pressure) from VIX, MOVE, Baa−10y spread, S&P trend, DXY, copper/gold, breakevens, the 10y yield and the 10y−2y curve. These give 4 regimes, and each regime maps to a total exposure cap.
 2. **Momentum sizing** (`signals.py`, `sizing.py`). Score = average rolling Sharpe over 21/63/126/252 days, EWMA-smoothed. A 20-day breakout floor lifts a sleeve's strength to 1 while it is on (new 20d high, until a new 20d low). Weight = inverse-vol baseline × clip(score/0.5, 0, 1), normalized so live sleeves sum to 1, then × regime cap, with per-sleeve caps. The remainder goes to SGOV. (The normalize step and the breakout floor were added by the 2026-10-22 upside-capture study; see EXPERIMENTS.md.)
 3. **Execution realism.** Weights decided at close t earn t+1 returns. There's a 10-point rebalance band (5 points before 2026-10-23) and per-asset cost bps.
@@ -31,7 +31,9 @@ Known findings:
 - The risk axis does the work. The macro-pressure axis did not help exposure or tilts, so it's kept for labels only.
 - Sharpe is flat (0.91–0.98) across smoothing ∈ {2,5,10,20} × deadband ∈ {0, .15, .3}. No single indicator dominates in ablation.
 - The pre-study system made about 30 rebalances a year and lagged in V-shaped recoveries (2009, 2012, 2019, 2023, 2026 YTD). The breakout floor fixed most of that. The current system trades on about 14 days a year (22 with the old 5-point band, at equal performance), and its MaxDD (Aug 2011–Jul 2012) sits about 2 points inside the −20% limit. VT/GLDM caps are the drawdown dial (EXPERIMENTS.md, caps family).
-- Against static 60/30/10, which is close to the system's own average mix, the timing adds roughly 0–0.7%/yr of return but cuts vol by a third and MaxDD by a third to a half. Treat it as a drawdown-control overlay: return-raising levers converge toward 60/30/10, so judge new ideas against it (it's a row in every harness stats table).
+- Against static 60/30/10 (close to the system's own average mix): vs a *daily*-rebalanced mix the timing adds roughly 0–0.7%/yr, but vs a *yearly*-rebalanced mix (the realistic one) it **trails by 1.5–4.5%/yr pre-tax since 2005–2015 and ties since 2020**, all from bitcoin (pre-2014 the strategy wins by ~1.9%/yr). It does cut MaxDD roughly in half. Treat it as a drawdown-control overlay and judge new ideas against yearly 60/30/10 (`run_tax.py`; the harness stats row is the daily version).
+- **Taxable account: not viable as-is.** After federal tax it trails yearly 60/30/10 by 1–6%/yr (mostly short-term gains; tax drag 3.5–5.6%/yr). Ben has an IRA (non-taxable) and a larger taxable account. See EXPERIMENTS.md 2026-10-23.
+- Cash is a balance earning fed funds − 30bp (floored at 0), not SGOV (`data.cash_index`).
 - In the research harness, `{}` is the pre-study system and configs without `band` use 0.05 (`PRE_STUDY_BAND`); `PRODUCTION` is current config.py.
 - The momentum-only and 200d-MA rows above are pre-study variants.
 - ICE HY OAS on FRED only covers 3 years, which is why Baa10Y is used for credit.
