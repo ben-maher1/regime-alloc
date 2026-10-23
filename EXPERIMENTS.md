@@ -596,3 +596,52 @@ of MaxDD, leaving 1.9 points of room to the −20% limit. Out of sample, the
 CAGR-first pooled selection lands at 12.2% / −19.0% (WF[cagr_dd20] over all study configs), so
 expect a live drawdown near the limit at some point. The VT/GLDM caps above are the dial if that
 becomes uncomfortable.
+
+---
+
+## 2026-10-23 · Benchmark check: static 60/30/10 (exploratory, in-sample)
+
+**Question (Ben).** The new system and a static 60% VT / 30% GLDM / 10% IBIT mix are close
+since 2020. Does that change the design?
+
+**Why this benchmark matters.** The study measured upside capture against 80/15/5. But the
+system's own average holding is close to 60/30/10: since 2004 it averages VT 44% / GLDM 30% /
+IBIT 5% / SGOV 22%, and since 2020 VT 40% / GLDM 31% / IBIT 10%. Against 80/15/5, part of the
+measured edge is just the gold tilt. Against 60/30/10, what's left is the timing alone.
+
+**Static mix construction.** Daily rebalanced, no costs. Before IBIT/BTC data exists (pre-2014)
+the weights renormalize to 2/3 VT and 1/3 GLDM. Ad hoc script, not yet in the harness.
+
+| | 2004-10+ CAGR / Sharpe / MaxDD | 2010+ | 2020+ | trades/yr |
+|---|---|---|---|---|
+| production | 13.0% / 1.04 / −18.1% | 13.8% / 1.10 / −18.1% | 19.0% / 1.23 / −15.5% | 22 |
+| static 60/30/10 | 12.3% / 0.75 / −41.1% | 13.7% / 0.87 / −27.5% | 17.5% / 0.89 / −27.5% | — |
+| fixed 60/30/10 base + timing (`base_weights`) | 13.2% / 1.03 / −18.4% | 13.9% / 1.08 / −18.4% | 18.3% / 1.20 / −16.1% | 20 |
+| 50% production + 50% static | 12.8% / 0.94 / −26.1% | 13.8% / 1.03 / −20.3% | 18.5% / 1.10 / −20.3% | — |
+| production, weekly decisions (Fri) | 13.1% / 1.05 / −17.5% | 13.8% / 1.09 / −17.5% | 19.1% / 1.23 / −13.2% | 15 |
+| production, 10-point band | 13.4% / 1.06 / −18.3% | 14.2% / 1.12 / −18.3% | 19.7% / 1.26 / −15.2% | 14 |
+
+Calendar years, production vs static: production wins in down years (2008 −0.4% vs −26.1%,
+2018 −7.8% vs −15.9%, 2022 −7.9% vs −18.3%). It loses in strong bull years (2017 +41.6% vs
++61.6%, 2019 +17.3% vs +32.6%, 2023 +20.5% vs +29.9%). Production is ahead in only 45% of
+rolling 3-year windows.
+
+**Reading.**
+- **Against its own average mix, the timing adds almost no return** (+0.1%/yr since 2010,
+  +0.7% since 2004). It cuts volatility by about a third and MaxDD by a third to a half. The
+  system is a drawdown-control overlay on a 60/30/10-like portfolio, not a return engine.
+- **Chasing more CAGR has a ceiling.** Every exposure lever pushes the system toward being
+  always invested, i.e. toward static 60/30/10 with extra turnover. That makes 60/30/10 roughly
+  the upper bound for return-raising levers. Further work should target turnover and drawdown,
+  not CAGR.
+- **The base weighting doesn't matter.** A fixed 60/30/10 base performs within noise of
+  inverse-vol, so the earlier (e) finding was about 80/15/5 specifically.
+- **Blending with the static mix is dominated.** It gets the same CAGR as production, with a
+  worse Sharpe and a deeper drawdown.
+- **Turnover is the one clear lever.** Weekly decisions or a 10-point band cut trades by
+  roughly a third while matching or slightly beating every metric. The Sharpe differences are
+  under 0.05, which counts as noise. This is backlog item 3.
+
+**Verdict.** No production change from this. Next experiment: walk-forward test of a weekly
+cadence and a band of {0.05, 0.075, 0.10}, with 60/30/10 added to the harness as a second
+benchmark (and the brief's UpCap metric measured against it too).
