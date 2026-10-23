@@ -698,5 +698,12 @@ from real signal changes, not band noise.
 **Verdict: PASS for daily, band 0.10.** It's the simplest cell in the flat region: one
 parameter changed, no new production code path, a round number, 24 → 15 trade days a year at
 equal performance, and it tracks production's year-by-year path. Weekly cadence is **not**
-adopted: same totals, more path noise, and it would need new production code. **Not applied
-to `config.py` yet.** It changes when `run_daily.py` alerts fire, so it waits for Ben's call.
+adopted: same totals, more path noise, and it would need new production code.
+
+**Applied 2026-10-23 (Ben approved):** `REBALANCE_BAND = 0.10`. To keep logged results
+reproducible, the harness now defaults configs without `band` to `PRE_STUDY_BAND = 0.05`, and
+`PRODUCTION` carries `band` explicitly. Checked: caps and cadence cells reproduce their logged
+CAGRs to 4 dp, and `run(prices, build_targets(prices, exposure))` with config defaults is
+identical to `cadence:daily band 0.1`. New production, full period: 13.4% / 11.2% vol / 1.06 /
+−18.3%, 14 trade days a year. Side effect visible today: the model book keeps about 5% GLDM
+because the Sep 25 sale of the last 5% no longer clears the band.

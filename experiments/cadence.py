@@ -5,8 +5,9 @@ several gold in-out-in round trips). Deciding less often, or only trading when
 a sleeve drifts further from target, should cut turnover at no cost to
 CAGR/Sharpe/MaxDD. The exploratory check vs 60/30/10 (EXPERIMENTS.md
 2026-10-23) suggested weekly or a 10-point band do this; this is the
-walk-forward test. "baseline" here is PRODUCTION (daily, 5-point band), not
-the pre-study system.
+walk-forward test. "baseline" here is production as it was when this ran
+(daily, 5-point band), not the pre-study system. Production adopted daily
+band 0.10 from this family on 2026-10-23.
 
 Grid (production signals throughout):
   daily     band 0.05 (production) / 0.075 / 0.10 / 0.15
@@ -15,7 +16,7 @@ Grid (production signals throughout):
 """
 from regime_alloc.research import PRODUCTION
 
-GRID = {"baseline": {**PRODUCTION}}
+GRID = {"baseline": {**PRODUCTION, "band": 0.05}}
 for b in [0.075, 0.10, 0.15]:
     GRID[f"daily band {b:g}"] = {**PRODUCTION, "band": b}
 for b in [0.05, 0.075, 0.10]:

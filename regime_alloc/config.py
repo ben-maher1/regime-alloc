@@ -43,7 +43,7 @@ BREAKOUT_HIGH = 20                 # re-entry floor: close at a new N-day high -
 BREAKOUT_STRENGTH = 1.0            #   until a close at a new N-day low; None disables (EXPERIMENTS.md 2026-10-22)
 MAX_WEIGHT = {"VT": 1.0, "GLDM": 0.6, "IBIT": 0.2}
 TARGET_VOL = None                  # e.g. 0.12 for portfolio vol targeting; None = off
-REBALANCE_BAND = 0.05              # only trade a sleeve if |target - current| > band
+REBALANCE_BAND = 0.10              # only trade a sleeve if |target - current| > band (0.05 before 2026-10-23; EXPERIMENTS.md cadence family)
 
 # ---- Costs ----
 COST_BPS = {"VT": 3, "GLDM": 3, "IBIT": 5, "SGOV": 1}

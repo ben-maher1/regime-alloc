@@ -30,8 +30,9 @@ STAT_COLS = ["CAGR", "Vol", "Sharpe", "MaxDD", "Calmar", "UpCap", "DownCap", "Av
 REGIME_KEYS = {"regime_smoothing": "smoothing", "regime_deadband": "band", "regime_band_up": "band_up"}
 RUN_KEYS = {"exposure", "regime_exposure", "band", "rebalance"} | set(REGIME_KEYS)
 PRE_STUDY = {"redistribute": None, "breakout_high": None}
+PRE_STUDY_BAND = 0.05                  # configs without "band" keep the band every logged result used
 PRODUCTION = {"redistribute": C.REDISTRIBUTE, "breakout_high": C.BREAKOUT_HIGH,
-              "breakout_strength": C.BREAKOUT_STRENGTH}
+              "breakout_strength": C.BREAKOUT_STRENGTH, "band": C.REBALANCE_BAND}
 
 
 # ---------------------------------------------------------------- lab
@@ -74,7 +75,7 @@ class Lab:
         return decision_days(tw, cfg.get("rebalance", "daily"))
 
     def run(self, cfg: dict) -> dict:
-        res = run(self.prices, self.targets(cfg), band=cfg.get("band", C.REBALANCE_BAND))
+        res = run(self.prices, self.targets(cfg), band=cfg.get("band", PRE_STUDY_BAND))
         res["bench"] = benchmark(self.prices, BENCH, res["returns"].index)
         res["bench2"] = static_mix(self.prices, BENCH2, res["returns"].index)
         return res
