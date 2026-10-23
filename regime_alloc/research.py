@@ -20,6 +20,7 @@ from .backtest import benchmark, build_targets, run
 from .regime import compute_regime, regime_exposure, trend_filter_exposure
 
 BENCH = {"VT": 0.80, "GLDM": 0.15, "IBIT": 0.05}
+BENCH2 = {"VT": 0.60, "GLDM": 0.30, "IBIT": 0.10}   # ~ the system's own average mix (EXPERIMENTS.md 2026-10-23)
 LAG_YEARS = [2009, 2012, 2019, 2023, 2026]
 OOS_START = 2010                       # first walk-forward year (train = 2004-10 .. 2009 at minimum)
 NO_CAPS = {"VT": 1.0, "GLDM": 1.0, "IBIT": 1.0}
@@ -27,7 +28,7 @@ STAT_COLS = ["CAGR", "Vol", "Sharpe", "MaxDD", "Calmar", "UpCap", "DownCap", "Av
 
 # regime-side keys -> compute_regime kwargs (lever branches may extend this)
 REGIME_KEYS = {"regime_smoothing": "smoothing", "regime_deadband": "band", "regime_band_up": "band_up"}
-RUN_KEYS = {"exposure", "regime_exposure", "band"} | set(REGIME_KEYS)
+RUN_KEYS = {"exposure", "regime_exposure", "band", "rebalance"} | set(REGIME_KEYS)
 PRE_STUDY = {"redistribute": None, "breakout_high": None}
 PRODUCTION = {"redistribute": C.REDISTRIBUTE, "breakout_high": C.BREAKOUT_HIGH,
               "breakout_strength": C.BREAKOUT_STRENGTH}
@@ -69,12 +70,40 @@ class Lab:
 
     def targets(self, cfg: dict) -> pd.DataFrame:
         params = {**PRE_STUDY, **{k: v for k, v in cfg.items() if k not in RUN_KEYS}}
-        return build_targets(self.prices, self.exposure(cfg), params)
+        tw = build_targets(self.prices, self.exposure(cfg), params)
+        return decision_days(tw, cfg.get("rebalance", "daily"))
 
     def run(self, cfg: dict) -> dict:
         res = run(self.prices, self.targets(cfg), band=cfg.get("band", C.REBALANCE_BAND))
         res["bench"] = benchmark(self.prices, BENCH, res["returns"].index)
+        res["bench2"] = static_mix(self.prices, BENCH2, res["returns"].index)
         return res
+
+
+def decision_days(tw: pd.DataFrame, rebalance: str = "daily") -> pd.DataFrame:
+    """Only update targets on decision days and hold them in between:
+    "weekly" = Fridays, "monthly" = last trading day of the month (calendar
+    facts known in advance, so still causal)."""
+    if rebalance == "daily":
+        return tw
+    d = tw.index
+    if rebalance == "weekly":
+        on = d.dayofweek == 4
+    elif rebalance == "monthly":
+        on = np.r_[d.month[1:] != d.month[:-1], True]
+    else:
+        raise ValueError(f"rebalance={rebalance!r}")
+    return tw.where(pd.Series(on, index=d), axis=0).ffill()
+
+
+def static_mix(prices: pd.DataFrame, weights: dict, index: pd.DatetimeIndex) -> pd.Series:
+    """Daily-rebalanced, frictionless static mix; a sleeve with no data yet
+    (IBIT/BTC before 2014) is dropped and the rest renormalized."""
+    rets = prices[list(weights)].pct_change().reindex(index)
+    w = pd.DataFrame(np.tile(list(weights.values()), (len(index), 1)), index=index,
+                     columns=list(weights)).where(rets.notna())
+    w = w.div(w.sum(axis=1), axis=0)
+    return (w * rets.fillna(0.0)).sum(axis=1)
 
 
 # ---------------------------------------------------------------- metrics

@@ -67,6 +67,8 @@ def stats_table(lab, runs, start=None, wf: dict | None = None):
     any_res = next(iter(runs.values()))
     b = window(any_res["bench"], start)
     rows["static 80/15/5"] = full_stats(b, any_res["bench"], lab.rf)
+    if "bench2" in any_res:
+        rows["static 60/30/10"] = full_stats(window(any_res["bench2"], start), any_res["bench"], lab.rf)
     for n, r in (wf or {}).items():
         rows[f"WF[{n}]"] = full_stats(r, any_res["bench"], lab.rf)
     return pd.DataFrame(rows).T.reindex(columns=STAT_COLS)

@@ -645,3 +645,58 @@ rolling 3-year windows.
 **Verdict.** No production change from this. Next experiment: walk-forward test of a weekly
 cadence and a band of {0.05, 0.075, 0.10}, with 60/30/10 added to the harness as a second
 benchmark (and the brief's UpCap metric measured against it too).
+
+---
+
+## 2026-10-23 · Lever family: rebalance cadence and band · `experiments/cadence.py`
+
+**Hypothesis.** Production makes about 22 trades a year, some of them churn (2023 had 36,
+with several gold in-out-in round trips). Deciding less often, or trading only on a larger
+drift, should cut turnover at no cost to CAGR, Sharpe or MaxDD.
+
+**Change (harness only).** A new run key, `rebalance` ∈ {daily, weekly, monthly}.
+`research.decision_days` updates targets only on Fridays or on the month's last trading day
+and holds them in between. That's a calendar fact known in advance, so it stays causal.
+`static 60/30/10` (`BENCH2`, renormalized before IBIT/BTC data exists) is now a row in every
+stats table. In this family, "baseline" is **production** (daily, 5-point band). Lookahead:
+ALL PASS on real data (8 cells).
+
+**Results, walk-forward window 2010+** (`research_results/grid_cadence.md`):
+
+| | CAGR | Vol | Sharpe | MaxDD | Trade days/yr |
+|---|---|---|---|---|---|
+| **production (daily, band 0.05)** | 13.8% | 11.1% | 1.10 | −18.1% | 24 |
+| daily, band 0.075 | 13.9% | 11.1% | 1.10 | −18.4% | 19 |
+| **daily, band 0.10** | 14.2% | 11.2% | 1.12 | −18.3% | **15** |
+| daily, band 0.15 | 13.6% | 11.3% | 1.06 | −18.7% | 12 |
+| weekly, band 0.05 | 13.8% | 11.2% | 1.09 | −17.5% | 16 |
+| weekly, band 0.075 | 14.2% | 11.2% | 1.12 | −17.7% | 14 |
+| weekly, band 0.10 | 13.7% | 11.3% | 1.08 | −17.7% | 12 |
+| monthly, band 0.05 | 12.2% | 11.5% | 0.94 | −18.3% | 9 |
+| static 60/30/10 | 13.7% | 14.5% | 0.87 | −27.5% | — |
+| WF[sharpe] / [calmar] / [cagr_dd20] | 13.7 / 13.8 / 14.0% | 11.2% | 1.09 / 1.09 / 1.11 | −17.7 / −18.4 / −17.7% | — |
+
+Full period (2004-10+): production 13.0% / 1.04 / −18.1% (22 trade days a year); daily 0.10
+13.4% / 1.06 / −18.3% (14); weekly 0.05 13.1% / 1.05 / −17.5% (15); monthly 11.4% / 0.90 /
+−21.8% (8).
+
+One-way turnover barely moves: 3.88/yr for production, 3.64 for daily 0.10, 3.74 for weekly
+0.05. Cost drag falls only from 20.7 to about 19 bp/yr. Fewer, larger trades: the turnover comes
+from real signal changes, not band noise.
+
+**Reading.**
+- **Flat region from daily 0.05 to weekly 0.10.** Every cell is within 0.5% CAGR and 0.04
+  Sharpe of production, which is noise. The WF rows match production, so selecting among
+  cadences adds nothing. Two cells degrade: **monthly** (−1.6% CAGR, −0.16 Sharpe, and the
+  full-period MaxDD goes past −20%) and, mildly, **band 0.15**. That marks the edge.
+- **Weekly is noisier year to year.** Same totals, but which day the decision lands on
+  matters: 2026 YTD is +4.6–4.9% weekly against +9.6% daily, and 2012 is −0.5% against +1.9%.
+  Daily band 0.10 tracks production year by year (2026 +10.9%, 2012 +2.2%).
+- **The gain is fewer trade days, not lower costs.** For a human-approved process that is the
+  benefit that matters: about 9 fewer trade/alert days a year.
+
+**Verdict: PASS for daily, band 0.10.** It's the simplest cell in the flat region: one
+parameter changed, no new production code path, a round number, 24 → 15 trade days a year at
+equal performance, and it tracks production's year-by-year path. Weekly cadence is **not**
+adopted: same totals, more path noise, and it would need new production code. **Not applied
+to `config.py` yet.** It changes when `run_daily.py` alerts fire, so it waits for Ben's call.
